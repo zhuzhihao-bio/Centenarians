@@ -1,0 +1,826 @@
+setwd("C:/Users/91551/Desktop/code") # path to your directory
+
+if (!requireNamespace("tidyverse", quietly = TRUE)) {install.packages("tidyverse")}
+if (!requireNamespace("ggalluvial", quietly = TRUE)) {install.packages("ggalluvial")}
+if (!requireNamespace("patchwork", quietly = TRUE)) {install.packages("patchwork")}
+if (!requireNamespace("readxl", quietly = TRUE)) {install.packages("readxl")}
+if (!requireNamespace("pheatmap", quietly = TRUE)) {install.packages("pheatmap")}
+if (!requireNamespace("ggpubr",       quietly = TRUE)) install.packages("ggpubr")
+if (!requireNamespace("ggrepel",      quietly = TRUE)) install.packages("ggrepel")
+if (!requireNamespace("RColorBrewer", quietly = TRUE)) install.packages("RColorBrewer")
+if (!requireNamespace("vegan",        quietly = TRUE)) install.packages("vegan")
+if (!requireNamespace("grid",         quietly = TRUE)) install.packages("grid")
+if (!requireNamespace("cowplot",      quietly = TRUE)) install.packages("cowplot")
+
+library(tidyverse) 
+library(ggalluvial)
+library(patchwork)
+library(readxl)
+library(pheatmap)
+library(ggpubr)
+library(ggrepel)
+library(RColorBrewer)
+library(vegan)
+library(grid)
+library(cowplot)
+
+### Fig6A. genome_diff ###
+
+df <- read_excel("6A_A_ihumii_10.xlsx")
+
+# Data preprocessing
+df_sankey <- df %>%
+  separate_rows(geneID, sep = "/") %>% 
+  mutate(geneID = str_trim(geneID))   
+
+order_levels <- df %>% arrange(desc(GRatio)) %>% pull(Description)
+df$Description <- factor(df$Description, levels = order_levels)
+df_sankey$Description <- factor(df_sankey$Description, levels = order_levels)
+
+# Calculate -log10(Pvalue)
+df$logP <- -log10(df$pvalue)
+
+# Define a color palette
+my_colors <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", 
+               "#FFFF33", "#A65628", "#F781BF", "#999999", "#66C2A5")
+
+sankey_colors <- colorRampPalette(my_colors)(length(unique(df_sankey$Description)))
+
+# p_left
+p_left <- ggplot(df_sankey, aes(axis1 = geneID, axis2 = Description, y = 1)) +
+  geom_alluvium(aes(fill = Description), width = 0.1, alpha = 0.3, curve_type = "sigmoid") +
+  geom_stratum(width = 0.1, aes(fill = Description, color = Description), alpha = 1) +
+  
+  geom_text(stat = "stratum", 
+            aes(label = ifelse(after_stat(x) == 1, as.character(after_stat(stratum)), NA)),
+            hjust = 1,        
+            nudge_x = -0.1,   
+            size = 3.5) +
+  
+  geom_text(stat = "stratum", 
+            aes(label = ifelse(after_stat(x) == 2, as.character(after_stat(stratum)), NA)),
+            hjust = 1,        
+            nudge_x = -0.06,  
+            size = 3, fontface = "bold") +
+  
+  scale_x_continuous(limits = c(-2.5, 2.05), expand = c(0, 0)) +
+  scale_fill_manual(values = sankey_colors) +
+  scale_color_manual(values = sankey_colors) +
+  theme_void() + 
+  theme(
+    legend.position = "none",
+    plot.margin = margin(t = 10, r = -2, b = 10, l = 10) 
+  )
+
+# p_right
+p_right <- ggplot(df, aes(x = GRatio, y = Description)) +
+  geom_point(aes(size = Count, color = logP)) +
+  
+  scale_color_gradient(low = "blue", high = "red", name = expression(-log[10](P))) +
+  scale_size_continuous(range = c(2, 6), breaks = c(1, 2, 3, 5)) +
+  
+  scale_x_continuous(breaks = c(2, 4), limits = c(0.5, 5.5)) +
+  
+  labs(x = "Mean_diff", y = NULL) + 
+  theme_bw() +
+  theme(
+    axis.text.y = element_blank(), 
+    axis.ticks.y = element_blank(), 
+    axis.title.y = element_blank(),
+    
+    panel.grid.major.y = element_line(color = "grey90", linetype = "dashed"), 
+    panel.grid.major.x = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    legend.position = "right", 
+    legend.box = "vertical",
+    legend.margin = margin(0,0,0,0),
+    
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 0) 
+  )
+
+# Combine Plots
+fig6A <- p_left + p_right + plot_layout(widths = c(2.2, 1))
+
+print(fig6A)
+
+ggsave("fig6A.pdf", fig6A, width = 11, height = 6)
+
+
+### Fig6B. pangenome ###
+
+df <- readr::read_csv("6B_pangenome.csv")
+
+gene_order <- c("ramA", "bglX", "Flr", "Fcr", "phy", "Chi")
+
+# data processing
+presence_data <- df %>%
+  filter(mapping_status == "mapped") %>%
+  group_by(species, target_gene) %>%
+  arrange(desc(bitscore)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  mutate(presence_value = case_when(
+    gene_category == "core" ~ 2,
+    gene_category == "accessory" ~ 1,
+    TRUE ~ 0
+  )) %>%
+  select(species, target_gene, presence_value)
+
+full_grid <- expand_grid(
+  species    = unique(df$species),
+  target_gene = gene_order
+)
+
+heatmap_df <- full_grid %>%
+  left_join(presence_data, by = c("species", "target_gene")) %>%
+  mutate(
+    presence_value = replace_na(presence_value, 0),
+    target_gene    = factor(target_gene, levels = gene_order)
+  ) %>%
+  pivot_wider(
+    names_from  = target_gene,
+    values_from = presence_value,
+    values_fill = 0
+  ) %>%
+  as.data.frame()
+
+rownames(heatmap_df) <- heatmap_df$species
+heatmap_df$species <- NULL
+
+heatmap_mat <- as.matrix(heatmap_df)
+
+missing_genes <- setdiff(gene_order, colnames(heatmap_mat))
+if (length(missing_genes) > 0) {
+  for (g in missing_genes) {
+    heatmap_mat <- cbind(heatmap_mat, setNames(list(rep(0, nrow(heatmap_mat))), g))
+  }
+}
+
+heatmap_mat <- heatmap_mat[, gene_order, drop = FALSE]
+
+# fig6B
+color_palette    <- c("white", "#6BAED6", "#D73027")
+breaks_for_color <- c(-0.5, 0.5, 1.5, 2.5)
+
+pdf_height <- max(6, nrow(heatmap_mat) * 0.2)
+
+fig6B <- pheatmap(
+  heatmap_mat,
+  main           = "Distribution of Flavonoid Degradation Genes Across Bacterial Species",
+  color          = color_palette,
+  breaks         = breaks_for_color,
+  cluster_rows   = TRUE,
+  cluster_cols   = FALSE,   
+  show_rownames  = TRUE,
+  show_colnames  = TRUE,
+  fontsize       = 10,
+  fontsize_row   = 9,
+  fontsize_col   = 10,
+  cellwidth      = 18,
+  cellheight     = 13,
+  angle_col      = 45,
+  display_numbers = FALSE,
+  legend         = TRUE,
+  legend_breaks  = c(0.5, 1.5, 2.5),
+  legend_labels  = c("Absent", "Accessory", "Core"),
+  border_color   = "grey60",
+  na_col         = "white",
+  filename       = NA       
+)
+
+print(fig6B)
+
+ggsave("fig6B.pdf", fig6B, width = 10, height = pdf_height)
+
+
+### Fig6 and S7. metabolism ###
+
+theme_set(theme_classic(base_size = 14))
+
+overview_data <- read_excel("metabolism.xlsx")
+
+id_col_name   <- "ID"
+name_col_name <- "compound name"
+
+all_cols    <- names(overview_data)
+sample_cols <- setdiff(all_cols, c(id_col_name, name_col_name))
+
+metadata <- tibble(
+  Sample = sample_cols,
+  Group  = factor(sub("_(.*)$", "", sample_cols))
+)
+
+abundance_data <- overview_data %>%
+  select(all_of(sample_cols)) %>%
+  as.matrix()
+
+if (any(!sapply(abundance_data, is.numeric))) {
+  abundance_data <- apply(abundance_data, 2, as.numeric)
+}
+
+metabolite_ids <- overview_data[[id_col_name]]
+if (any(duplicated(metabolite_ids))) {
+  metabolite_ids <- make.unique(paste(metabolite_ids, seq_len(nrow(overview_data)), sep = "_"))
+}
+rownames(abundance_data) <- metabolite_ids
+
+metabolite_metadata <- overview_data %>%
+  select(all_of(c(id_col_name, name_col_name))) %>%
+  rename(
+    ID   = !!id_col_name,
+    Name = !!name_col_name
+  ) %>%
+  mutate(ID = metabolite_ids)
+
+abundance_t <- t(abundance_data)
+
+## Handle NA / zeros 
+if (!any(abundance_t > 0, na.rm = TRUE)) {
+  stop("No positive values in abundance data.")
+}
+
+if (any(is.na(abundance_t)) || any(abundance_t == 0)) {
+  min_val_positive <- min(abundance_t[abundance_t > 0], na.rm = TRUE)
+  if (any(is.na(abundance_t))) {
+    abundance_t[is.na(abundance_t)] <- min_val_positive / 2
+  }
+  if (any(abundance_t == 0)) {
+    abundance_t[abundance_t == 0] <- min_val_positive / 2
+  }
+}
+
+## 2. PCA 
+abundance_scaled <- scale(log2(abundance_t), center = TRUE, scale = TRUE)
+
+if (!all(rownames(abundance_scaled) == metadata$Sample)) {
+  stop("Row names of abundance_scaled do not match metadata$Sample order.")
+}
+
+pca_result <- prcomp(abundance_scaled, scale. = FALSE, center = FALSE)
+
+pca_scores <- as.data.frame(pca_result$x) %>%
+  rownames_to_column(var = "Sample") %>%
+  left_join(metadata, by = "Sample")
+
+group_order_for_side_plots <- sort(unique(metadata$Group))
+pca_scores$Group <- factor(pca_scores$Group, levels = group_order_for_side_plots)
+metadata$Group   <- factor(metadata$Group,   levels = group_order_for_side_plots)
+
+pca_variance <- summary(pca_result)$importance %>%
+  as.data.frame() %>%
+  slice(2) %>%
+  pivot_longer(everything(), names_to = "PC", values_to = "Variance") %>%
+  mutate(PC_label = paste0(PC, " (", sprintf("%.2f", Variance * 100), "%)"))
+
+all_groups <- levels(metadata$Group)
+default_colors <- RColorBrewer::brewer.pal(max(3, length(all_groups)), "Set1")
+group_colors <- setNames(default_colors[seq_along(all_groups)], all_groups)
+
+## 3. PERMANOVA 
+permanova_p_value   <- NA
+permanova_r_squared <- NA
+
+tryCatch({
+  dist_matrix <- dist(abundance_scaled, method = "euclidean")
+  adonis_result <- adonis2(dist_matrix ~ Group, data = metadata, permutations = 999)
+  permanova_r_squared <- round(adonis_result$R2[1], 3)
+  permanova_p_value  <- round(adonis_result$`Pr(>F)`[1], 3)
+}, error = function(e) {})
+
+permanova_text <- if (!is.na(permanova_r_squared) && !is.na(permanova_p_value)) {
+  paste0("R=", permanova_r_squared, ", P=", permanova_p_value)
+} else {
+  ""
+}
+
+## 4. PCA plots 
+pc1_range    <- c(-20, 20)
+pc2_range    <- c(-20, 20)
+small_margin <- unit(c(0.1, 0.1, 0.1, 0.1), "cm")
+
+p_pca_main <- ggplot(pca_scores, aes(x = PC1, y = PC2, color = Group, fill = Group)) +
+  geom_point(size = 2.5, alpha = 1, shape = 19) +
+  stat_ellipse(
+    aes(group = Group),
+    level = 0.95,
+    geom = "polygon",
+    alpha = 0.1,
+    show.legend = FALSE,
+    data = . %>% group_by(Group) %>% filter(n() > 2)
+  ) +
+  labs(
+    x = pca_variance$PC_label[1],
+    y = pca_variance$PC_label[2]
+  ) +
+  scale_x_continuous(
+    limits = pc1_range,
+    breaks = seq(-20, 20, by = 10),
+    expand = expansion(mult = 0.02)
+  ) +
+  scale_y_continuous(
+    limits = pc2_range,
+    breaks = seq(-20, 20, by = 10),
+    expand = expansion(mult = 0.02)
+  ) +
+  theme(
+    legend.position   = "none",
+    panel.background  = element_rect(fill = "white", colour = "black", linewidth = 1),
+    panel.grid.major  = element_line(colour = "gray", linetype = "dotted", linewidth = 0.5),
+    panel.grid.minor  = element_blank(),
+    axis.line         = element_blank(),
+    axis.ticks        = element_line(colour = "black", linewidth = 0.5),
+    axis.text         = element_text(color = "black", size = 12),
+    axis.title        = element_text(color = "black", size = 14),
+    axis.ticks.length = unit(0.15, "cm"),
+    plot.margin       = small_margin
+  ) +
+  scale_color_manual(values = group_colors) +
+  scale_fill_manual(values = group_colors)
+
+pca_scores_for_side_plots <- pca_scores
+
+if (length(all_groups) >= 2) {
+  comparison_list_stats <- combn(all_groups, 2, simplify = FALSE)
+} else {
+  comparison_list_stats <- list()
+}
+
+valid_comparisons <- comparison_list_stats %>%
+  keep(~ {
+    g1 <- .x[1]; g2 <- .x[2]
+    n1 <- pca_scores_for_side_plots %>% filter(Group == g1) %>% nrow()
+    n2 <- pca_scores_for_side_plots %>% filter(Group == g2) %>% nrow()
+    all(.x %in% levels(pca_scores_for_side_plots$Group)) && n1 >= 2 && n2 >= 2
+  })
+
+p_pca_side_top <- ggplot(pca_scores_for_side_plots, aes(x = PC1, y = Group, fill = Group)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA, color = "black", linewidth = 0.5) +
+  geom_point(
+    position = position_jitter(width = 0, height = 0.2),
+    alpha    = 1,
+    size     = 2,
+    color    = "black"
+  ) +
+  scale_x_continuous(
+    breaks = seq(-20, 20, by = 10),
+    expand = expansion(mult = c(0.02, 0.12))
+  ) +
+  labs(x = "", y = "") +
+  theme(
+    axis.text.x         = element_blank(),
+    axis.ticks.x        = element_blank(),
+    axis.title.x        = element_blank(),
+    axis.line.y         = element_line(colour = "black", linewidth = 0.5),
+    axis.line.x         = element_blank(),
+    panel.background    = element_rect(fill = "white", colour = "black", linewidth = 1),
+    panel.grid.major    = element_blank(),
+    panel.grid.minor    = element_blank(),
+    plot.margin         = small_margin,
+    legend.position     = "none",
+    axis.text.y         = element_text(color = "black", size = 12),
+    axis.ticks.y        = element_line(colour = "black", linewidth = 0.5),
+    axis.ticks.length.y = unit(0.15, "cm")
+  ) +
+  scale_fill_manual(values = group_colors)
+
+if (length(valid_comparisons) > 0) {
+  p_pca_side_top <- p_pca_side_top +
+    stat_compare_means(
+      comparisons      = valid_comparisons,
+      method           = "t.test",
+      label            = "p.signif",
+      hide.ns          = TRUE,
+      size             = 4.5,
+      vjust            = -0.2,
+      bracket.size     = 0.4,
+      tip.length       = 0.01,
+      step.increase    = 0.08,
+      map_signif_level = TRUE
+    )
+}
+
+p_pca_side_right <- ggplot(pca_scores_for_side_plots, aes(x = Group, y = PC2, fill = Group)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA, color = "black", linewidth = 0.5) +
+  geom_point(
+    position = position_jitter(width = 0.15, height = 0),
+    alpha    = 1,
+    size     = 2,
+    color    = "black"
+  ) +
+  scale_y_continuous(
+    breaks = seq(-20, 20, by = 10),
+    expand = expansion(mult = c(0.02, 0.15))
+  ) +
+  labs(x = "", y = "") +
+  theme(
+    axis.text.x      = element_text(angle = 45, hjust = 1, vjust = 1,
+                                    color = "black", size = 12),
+    axis.ticks.x     = element_line(colour = "black", linewidth = 0.5),
+    axis.text.y      = element_text(color = "black", size = 12),
+    axis.ticks.y     = element_line(colour = "black", linewidth = 0.5),
+    axis.title.x     = element_blank(),
+    axis.title.y     = element_blank(),
+    axis.line.x      = element_line(colour = "black", linewidth = 0.5),
+    axis.line.y      = element_line(colour = "black", linewidth = 0.5),
+    panel.background = element_rect(fill = "white", colour = "black", linewidth = 1),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position  = "none",
+    plot.margin      = small_margin
+  ) +
+  scale_fill_manual(values = group_colors)
+
+if (length(valid_comparisons) > 0) {
+  p_pca_side_right <- p_pca_side_right +
+    stat_compare_means(
+      comparisons      = valid_comparisons,
+      method           = "t.test",
+      label            = "p.signif",
+      hide.ns          = TRUE,
+      size             = 4.5,
+      vjust            = -0.3,
+      bracket.size     = 0.4,
+      tip.length       = 0.01,
+      step.increase    = 0.08,
+      map_signif_level = TRUE
+    )
+}
+
+p_legend_plot <- ggplot(data.frame(Group = names(group_colors)),
+                        aes(x = 1, y = Group, color = Group)) +
+  geom_point(size = 4, shape = 19) +
+  scale_color_manual(values = group_colors) +
+  theme_void() +
+  theme(
+    legend.position   = "right",
+    legend.direction  = "vertical",
+    legend.text       = element_text(size = 12, color = "black"),
+    legend.key        = element_rect(fill = "white", colour = NA),
+    legend.background = element_rect(fill = "white", colour = NA),
+    panel.background  = element_rect(fill = "white", colour = "black", linewidth = 1),
+    plot.margin       = small_margin
+  ) +
+  guides(color = guide_legend(override.aes = list(shape = 19, size = 4), title = ""))
+
+plots_2x2_grid <- plot_grid(
+  p_pca_side_top, p_legend_plot,
+  p_pca_main,     p_pca_side_right,
+  ncol = 2, nrow = 2,
+  rel_widths  = c(3.5, 1.5),
+  rel_heights = c(1.5, 4),
+  align       = "hv",
+  axis        = "lrtb"
+)
+
+overall_title_text <- paste0("Scores(PCA)\n", permanova_text)
+
+title_spacer_plot <- ggplot() + theme_void() +
+  theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
+
+final_pca <- plot_grid(
+  title_spacer_plot,
+  plots_2x2_grid,
+  ncol        = 1,
+  rel_heights = c(0.12, 0.88)
+) +
+  draw_label(
+    overall_title_text,
+    x      = 0.5,
+    y      = 0.97,
+    hjust  = 0.5,
+    vjust  = 0.5,
+    size   = 16,
+    fontface = "plain",
+    color  = "black"
+  )
+
+ggsave("figS7B.pdf",
+       plot = final_pca, width = 10, height = 9, dpi = 600)
+
+## 5. Differential analysis 
+metabolite_metadata <- metabolite_metadata %>%
+  mutate(ID = as.character(ID))
+
+log2_abundance <- log2(abundance_t)
+stopifnot(all(rownames(log2_abundance) == metadata$Sample))
+
+diff_test_two_groups <- function(group1, group2, metadata, log2_abundance) {
+  samples_g1 <- metadata %>%
+    filter(Group == group1) %>%
+    pull(Sample)
+  samples_g2 <- metadata %>%
+    filter(Group == group2) %>%
+    pull(Sample)
+  
+  if (length(samples_g1) < 2 | length(samples_g2) < 2) {
+    stop(paste0("Group ", group1, " or ", group2, " has < 2 samples."))
+  }
+  
+  mat_g1 <- log2_abundance[rownames(log2_abundance) %in% samples_g1, , drop = FALSE]
+  mat_g2 <- log2_abundance[rownames(log2_abundance) %in% samples_g2, , drop = FALSE]
+  
+  res_list <- lapply(seq_len(ncol(log2_abundance)), function(j) {
+    x <- mat_g1[, j]
+    y <- mat_g2[, j]
+    
+    p_val <- tryCatch({
+      t.test(x, y)$p.value
+    }, error = function(e) NA_real_)
+    
+    data.frame(
+      ID      = colnames(log2_abundance)[j],
+      log2FC  = mean(x, na.rm = TRUE) - mean(y, na.rm = TRUE),
+      pvalue  = p_val,
+      stringsAsFactors = FALSE
+    )
+  })
+  
+  diff_res <- bind_rows(res_list) %>%
+    mutate(
+      ID    = as.character(ID),
+      FDR   = p.adjust(pvalue, method = "BH"),
+      FDR   = ifelse(FDR == 0 | is.na(FDR), 1e-300, FDR),
+      negLog10FDR = -log10(FDR),
+      Direction = case_when(
+        log2FC > 0  ~ paste0("Up in ", group1),
+        log2FC < 0  ~ paste0("Down in ", group1),
+        TRUE        ~ "No change"
+      )
+    ) %>%
+    left_join(metabolite_metadata, by = "ID") %>%
+    mutate(
+      Metabolite = ifelse(is.na(Name) | Name == "", ID, Name)
+    )
+  
+  diff_res
+}
+
+group_gam  <- "GAM"
+group_y120 <- "Y120"
+group_y294 <- "Y294"
+
+diff_Y120_vs_GAM  <- diff_test_two_groups(group_y120, group_gam,  metadata, log2_abundance)
+diff_Y294_vs_GAM  <- diff_test_two_groups(group_y294, group_gam,  metadata, log2_abundance)
+diff_Y120_vs_Y294 <- diff_test_two_groups(group_y120, group_y294, metadata, log2_abundance)
+
+## 6. Bubble plots vs GAM 
+bubble_all <- bind_rows(
+  diff_Y120_vs_GAM %>% mutate(Comparison = "Y120 / GAM"),
+  diff_Y294_vs_GAM %>% mutate(Comparison = "Y294 / GAM")
+)
+
+top_n_bubble <- 40
+
+bubble_top <- bubble_all %>%
+  arrange(desc(abs(log2FC))) %>%
+  slice_head(n = top_n_bubble) %>%
+  mutate(
+    Comparison = factor(Comparison, levels = c("Y120 / GAM", "Y294 / GAM"))
+  ) %>%
+  group_by(Comparison) %>%
+  arrange(log2FC, .by_group = TRUE) %>%
+  mutate(
+    Metabolite = factor(Metabolite, levels = unique(Metabolite))
+  ) %>%
+  ungroup()
+
+bubble_color_limits <- c(
+  min(bubble_top$log2FC, na.rm = TRUE),
+  max(bubble_top$log2FC, na.rm = TRUE)
+)
+
+p_bubble_diff <- ggplot(bubble_top,
+                        aes(x = Comparison, y = Metabolite)) +
+  geom_point(
+    aes(size = negLog10FDR, color = log2FC),
+    alpha = 0.9
+  ) +
+  scale_size_continuous(
+    range = c(3, 10),
+    name  = expression(-log[10]("FDR"))
+  ) +
+  scale_color_gradient2(
+    low      = "#4575B4",
+    mid      = "white",
+    high     = "#D73027",
+    midpoint = 0,
+    limits   = bubble_color_limits,
+    name     = "log2FC"
+  ) +
+  labs(
+    x     = NULL,
+    y     = NULL,
+    title = "Differential metabolites vs GAM"
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    plot.title      = element_text(hjust = 0.5, face = "bold", size = 16),
+    axis.text.x     = element_text(angle = 0, hjust = 0.5, vjust = 0.5,
+                                   color  = "black", size = 12),
+    axis.text.y     = element_text(color = "black", size = 9),
+    legend.title    = element_text(size = 11, color = "black"),
+    legend.text     = element_text(size = 10, color = "black"),
+    legend.key      = element_blank(),
+    axis.line       = element_blank(),
+    axis.ticks      = element_blank(),
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.3),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor   = element_blank(),
+    plot.margin        = unit(c(0.5, 0.8, 0.5, 1.4), "cm")
+  )
+
+ggsave("figS7C.pdf",
+       plot = p_bubble_diff, width = 7, height = 9, dpi = 600)
+
+## Volcano plot: Y120 vs Y294
+
+volcano_data <- diff_Y120_vs_Y294 %>%
+  mutate(
+    Regulation = case_when(
+      log2FC > 0  ~ paste0("Up in ", group_y120),
+      log2FC < 0  ~ paste0("Up in ", group_y294),
+      TRUE        ~ "No change"
+    ),
+    Regulation = factor(Regulation,
+                        levels = c(paste0("Up in ", group_y120),
+                                   paste0("Up in ", group_y294),
+                                   "No change"))
+  )
+
+volcano_colors <- c(
+  "Up in Y120" = "#D73027",
+  "Up in Y294" = "#4575B4",
+  "No change"  = "grey70"
+)
+
+label_n <- 20
+label_volcano <- volcano_data %>%
+  arrange(desc(abs(log2FC))) %>%
+  slice_head(n = label_n)
+
+p_volcano_Y120_Y294 <- ggplot(volcano_data,
+                              aes(x = log2FC, y = negLog10FDR, color = Regulation)) +
+  geom_point(alpha = 0.8, size = 1.8) +
+  scale_color_manual(values = volcano_colors) +
+  geom_text_repel(
+    data = label_volcano,
+    aes(label = Metabolite),
+    size          = 3,
+    max.overlaps  = 100,
+    box.padding   = 0.3,
+    point.padding = 0.2,
+    segment.color = "grey50"
+  ) +
+  labs(
+    x = paste0("log2(Fold Change) (", group_y120, " / ", group_y294, ")"),
+    y = expression(-log[10]("FDR")),
+    title = paste0("Volcano plot: ", group_y120, " vs ", group_y294)
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    plot.title      = element_text(hjust = 0.5, face = "bold", size = 16),
+    legend.title    = element_blank(),
+    legend.position = "right",
+    axis.text       = element_text(color = "black"),
+    axis.title      = element_text(color = "black")
+  )
+
+ggsave("fig6C.pdf",
+       plot = p_volcano_Y120_Y294, width = 7, height = 6, dpi = 600)
+
+
+## Q/T selection and long-format data (for Q→Tax plots)
+
+metabolites_of_interest <- c("Quercetin", "Taxifolin")
+
+id_col_name   <- "ID"
+name_col_name <- "compound name"
+
+all_cols    <- names(overview_data)
+sample_cols <- setdiff(all_cols, c(id_col_name, name_col_name))
+
+groups_keep <- c("GAM", "Y120", "Y294")
+
+sample_info <- tibble(
+  Sample = sample_cols,
+  Group  = sub("_(.*)$", "", sample_cols)
+) %>%
+  filter(Group %in% groups_keep)
+
+sample_cols_keep <- sample_info$Sample
+
+df_plot <- overview_data %>%
+  filter(!!sym(name_col_name) %in% metabolites_of_interest) %>%
+  select(
+    !!sym(id_col_name),
+    !!sym(name_col_name),
+    all_of(sample_cols_keep)
+  ) %>%
+  pivot_longer(
+    cols      = all_of(sample_cols_keep),
+    names_to  = "Sample",
+    values_to = "Expression"
+  ) %>%
+  mutate(
+    Group = sub("_(.*)$", "", Sample)
+  ) %>%
+  rename(
+    ID         = !!sym(id_col_name),
+    Metabolite = !!sym(name_col_name)
+  ) %>%
+  select(Sample, Group, Metabolite, Expression, ID) %>%
+  mutate(
+    Group      = factor(Group, levels = c("GAM", "Y120", "Y294")),
+    Metabolite = factor(Metabolite, levels = metabolites_of_interest)
+  )
+
+## Q→Tax boxplot version
+
+df_plot <- df_plot %>%
+  mutate(
+    Group      = factor(Group, levels = c("GAM", "Y120", "Y294")),
+    Metabolite = factor(Metabolite, levels = c("Quercetin", "Taxifolin"))
+  )
+
+low_threshold <- 0.1
+
+samples_remove <- df_plot %>%
+  filter(Group == "Y120") %>%
+  group_by(Sample) %>%
+  summarise(
+    max_expr = max(Expression, na.rm = TRUE),
+    .groups  = "drop"
+  ) %>%
+  filter(max_expr < low_threshold) %>%
+  pull(Sample)
+
+df_plot_filt <- df_plot %>%
+  filter(!(Group == "Y120" & Sample %in% samples_remove))
+
+metabolite_colors_box <- c(
+  "Quercetin" = "#4DBBD5FF",
+  "Taxifolin" = "#E64B35FF"
+)
+
+annot_df_box <- tibble(
+  x     = c(1.5, 2.5),
+  label = c("ns", "* (p < 0.05)")
+)
+
+y_top_box <- max(df_plot_filt$Expression, na.rm = TRUE) * 1.15
+
+p_expression_box <- ggplot(df_plot_filt, aes(x = Group, y = Expression)) +
+  geom_boxplot(
+    aes(fill = Metabolite),
+    position     = position_dodge(width = 0.6),
+    width        = 0.5,
+    outlier.shape = NA,
+    color        = "black",
+    linewidth    = 0.4
+  ) +
+  geom_point(
+    aes(color = Metabolite),
+    position = position_jitterdodge(
+      dodge.width  = 0.6,
+      jitter.width = 0.08
+    ),
+    size  = 2.2,
+    alpha = 0.9
+  ) +
+  geom_vline(
+    xintercept = c(1.5, 2.5),
+    linetype   = "dashed",
+    color      = "grey75",
+    linewidth  = 0.6
+  ) +
+  geom_text(
+    data = annot_df_box,
+    aes(x = x, y = y_top_box, label = label),
+    inherit.aes = FALSE,
+    vjust       = 0,
+    size        = 4
+  ) +
+  scale_fill_manual(values = metabolite_colors_box, name = "Metabolite") +
+  scale_color_manual(values = metabolite_colors_box, guide = "none") +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.18))
+  ) +
+  labs(
+    x = NULL,
+    y = "Expression Level"
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.x     = element_text(color = "black", size = 12),
+    axis.text.y     = element_text(color = "black", size = 12),
+    axis.title.y    = element_text(color = "black", size = 14),
+    legend.position = "right",
+    legend.title    = element_text(size = 12),
+    legend.text     = element_text(size = 11),
+    panel.border    = element_blank(),
+    axis.line       = element_line(color = "black", linewidth = 0.6),
+    plot.margin     = unit(c(0.8, 1, 0.8, 0.8), "cm")
+  )
+
+ggsave("fig6D.pdf",
+       plot = p_expression_box, width = 7, height = 4, dpi = 600)
