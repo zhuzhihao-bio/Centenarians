@@ -6,7 +6,7 @@ Date: "2026/03/25"
 
 # Fig 3A.Diagram of CGBB construction
    
-    This figure is manually drawn by Biorender (https://app.biorender.com/)
+    This figure is manually drawn by Biorender (https://app.biorender.com)
     
 # Fig 3B.Phylogenetic tree of 16S rDNA
 
