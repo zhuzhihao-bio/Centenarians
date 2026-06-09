@@ -1,0 +1,2142 @@
+---
+title: "Centenarians cohort data visualization (Fig. 2)"
+author: "Yuanping Zhou (周远平), Yong-Xin Liu(刘永鑫)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    theme: cerulean
+    highlight: haddock
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    code_fold: show
+  word_document:
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = T, echo=T, comment="#>", message=F, warning=F,
+	fig.align="center", fig.width=5, fig.height=3, dpi=150)
+```
+
+```{r package installation}
+# This rmarkdown analysis workflow use many R packages for data analysis, so to make it work well, we first need to install all the packages related.
+
+## package installation through cran-website by running following codes before the first time you use this workflow.
+# install.packages("ggplot2")
+# install.packeages("dplyr")
+# install.pacakges("scales")
+# install.packages("tidyverse")
+# install.packages("reshape2")
+# install.packages("tidyr")
+# install.packages("ggrepel")
+# install.packages("multcompView")
+# install.packages("PMCMRplus")
+# install.packages("ape")
+# install.packages("vegan")
+# install.packages("RColorBrewer")
+# install.packages("data.table")
+# install.packages("Hmisc")
+# install.packages("igraph")
+# install.packages("ggVennDiagram")
+# install.packages("ggprism")
+# install.packages("plyr")
+# install.packages("ggfun")
+# install.packages("cowplot")
+# install.packages("magrittr")
+
+## packages installed from Bioconductor or github websites
+# install.packages("BiocManager")
+# library(BiocManager)
+# install("remotes")
+# install("sna")
+# install("tidyfst")
+# install("phyloseq")
+# install("ggalluvial")
+# install("ggraph")
+# install("WGCNA")
+# install("ggnewscale")
+# install("pulsar")
+# install("patchwork")
+# remotes::install_github("taowenmicro/EasyStat")
+# remotes::install_github("taowenmicro/ggClusterNet")
+# install("ALDEx2")
+
+```
+
+## Fig.2A. Rerafaction curve
+
+Rarefaction curve
+
+```{r package load}
+# load related packages
+library("ggplot2")
+library("dplyr")
+library("scales")
+library("tidyverse")
+library("reshape2")
+library("tidyr")
+```
+
+```{r rarefaction curve}
+###########################################################################################################
+## Centenarians
+# Load MAG (metagenome-assembed genome) table of all the samples, which was generated using the coverm in our Easy-Metagenome pipeline.
+MAG_table_all <- read.table("./data_fig2/abundance.tsv", row.names= 1,  header=T, sep="\t")
+dim(MAG_table_all)
+# Load metadata table
+metadata<- read.table("./data_fig2/metadata_rmNA.txt", header = T, sep = "\t")
+rownames(metadata) <- metadata$SampleID
+metadata_C <- metadata %>% filter(Group == "C") # n=108
+
+# Select MAG_table of the centenarians based Group column of metadata
+MAG_table <-MAG_table_all[, rownames(metadata_C)] # n=108
+
+# Load the taxonomic table of MAGs
+taxonomy <- read.delim("./data_fig2/drep95_tax.txt", row.names= 1,header=T, sep="\t")
+# Add a new column called Full, cotaining the taxonomic information from Phylum to species, which is separated using semicomma.
+taxonomy$Full <- paste(taxonomy$Phylum, taxonomy$Class, taxonomy$Order, taxonomy$Family, taxonomy$Genus, taxonomy$Species, sep = ";")
+
+# Extract only those MAGs in both MAG_table and the taxonomic table
+idx <- rownames(MAG_table) %in% rownames(taxonomy)
+MAG_table <- MAG_table[idx, ]
+taxonomy <- taxonomy[rownames(MAG_table), ]
+
+# Rarefraction curve data generation
+sample_rare  <-  function(df, count_cutoff = .01, length = 108, rep = 30){  
+  result <- data.frame(sample = c(0), richness = c(0))
+  count <- df
+  # Set MAG table to binary for easy richness calculation
+  count[count < count_cutoff] = 0
+  count[count >= count_cutoff] = 1
+  # Sample number
+  n <- dim(count)[2]
+  # 
+  x <- unique(as.integer(seq(1, 108, length.out = 108)))
+  for (i in x){
+    m <- choose(n, i)
+    if (m > rep){m = rep}
+    # loop list and calculate richness
+    for(j in 1:m) {
+      idx <- sample(n, i)
+      temp <- count[, idx, drop = F]
+      # subset non-zero row
+      temp1 <- temp[rowSums(temp)>0, , drop=F]
+      # row number is accumulative MAGs
+      result <- rbind(result, c(i, dim(temp1)[1]))
+    }
+  }
+  # remove start 0,0
+  result <- result[-1, ]
+  # factor draw as each box
+  result$sample <- factor(result$sample, levels = unique(result$sample))
+  return(result)
+}
+rare_box <- sample_rare(MAG_table, count_cutoff = .01, length = 108, rep = 30)
+rare_box$group <- "C"
+rare_box_C <- rare_box
+colnames(rare_box_C) <- c("Number of Samples", "Number of Species","group")
+#####################################################################################################
+##  Offspring
+# Select the MAG table of the Lineal descendants
+metadata_L <- metadata %>% filter(Group == "L") # n=61
+MAG_table<- MAG_table_all[, rownames(metadata_L)] # n=61
+
+# Taxonomy table
+taxonomy <- read.delim("./data_fig2/drep95_tax.txt", row.names= 1,header=T, sep="\t")
+taxonomy$Full <- paste(taxonomy$Phylum,taxonomy$Class,taxonomy$Order,taxonomy$Family,taxonomy$Genus,taxonomy$Species,sep = ";")
+
+# Extract common samples in the two tables
+idx <- rownames(MAG_table) %in% rownames(taxonomy)
+MAG_table <- MAG_table[idx, ]
+taxonomy <- taxonomy[rownames(MAG_table), ]
+
+# Rarefraction curve
+sample_rare  <-  function(df, count_cutoff = .01, length = 61, rep = 30){  
+  result <- data.frame(sample = c(0), richness = c(0))
+  count <- df
+  # Set MAG table to binary for easy richness calculation
+  count[count < count_cutoff] = 0
+  count[count >= count_cutoff] = 1
+  # Sample number
+  n <- dim(count)[2]
+  # 
+  x <- unique(as.integer(seq(1, 61, length.out = 61)))
+  for (i in x){
+    m <- choose(n, i)
+    if (m > rep){m = rep}
+    # loop list and calculate richness
+    for(j in 1:m) {
+      idx <- sample(n, i)
+      temp <- count[, idx, drop = F]
+      # subset non-zero row
+      temp1 <- temp[rowSums(temp)>0, , drop=F]
+      # row number is accumulative MAGs
+      result <- rbind(result, c(i, dim(temp1)[1]))
+    }
+  }
+  # remove start 0,0
+  result <- result[-1, ]
+  # factor draw as each box
+  result$sample <- factor(result$sample, levels = unique(result$sample))
+  return(result)
+}
+rare_box <- sample_rare(MAG_table, count_cutoff = .01, length = 61, rep = 30)
+rare_box$group <- "L"
+rare_box_L<-rare_box
+colnames(rare_box_L) <- c("Number of Samples", "Number of Species","group")
+# View(rare_box_L)
+#############################################################################################
+# Elderly
+# Select the MAG table of the Non-lineal elderly
+metadata_E <- metadata %>% filter(Group == "E") # n=72
+dim(metadata_E)
+MAG_table <- MAG_table_all[, rownames(metadata_E)] # n = 72
+
+# Taxonomy table
+taxonomy <- read.delim("./data_fig2/drep95_tax.txt", row.names = 1, header = T, sep = "\t")
+taxonomy$Full <- paste(taxonomy$Phylum,taxonomy$Class,taxonomy$Order,taxonomy$Family,taxonomy$Genus,taxonomy$Species, sep = ";")
+
+# Extract only those samples in common between the two tables
+idx <- rownames(MAG_table) %in% rownames(taxonomy)
+MAG_table <- MAG_table[idx, ]
+taxonomy <- taxonomy[rownames(MAG_table), ]
+
+# Rarefraction curve
+sample_rare  <-  function(df, count_cutoff = .01, length =72, rep = 30){  
+  result <- data.frame(sample = c(0), richness = c(0))
+  count <- df
+  # Set MAG table to binary for easy richness calculation
+  count[count < count_cutoff] = 0
+  count[count >= count_cutoff] = 1
+  # Sample number
+  n <- dim(count)[2]
+  # 
+  x <- unique(as.integer(seq(1, 72, length.out = 72)))
+  for (i in x){
+    m <- choose(n, i)
+    if (m > rep){m = rep}
+    # loop list and calculate richness
+    for(j in 1:m) {
+      idx <- sample(n, i)
+      temp <- count[, idx, drop = F]
+      # subset non-zero row
+      temp1 <- temp[rowSums(temp)>0, , drop=F]
+      # row number is accumulative MAGs
+      result <- rbind(result, c(i, dim(temp1)[1]))
+    }
+  }
+  # remove start 0,0
+  result <- result[-1,]
+  # factor draw as each box
+  result$sample <- factor(result$sample, levels = unique(result$sample))
+  return(result)
+}
+rare_box <- sample_rare(MAG_table, count_cutoff = .01, length = 72, rep = 30)
+rare_box$group <- "E"
+rare_box_E <- rare_box
+colnames(rare_box_E) <- c("Number of Samples", "Number of Species","group")
+#####################################################################################################################
+# Young group
+# Select the MAG table of the Non-lineal Young
+metadata_Y <- metadata %>% filter(Group == "Y") # n=65 volunteers
+MAG_table<- MAG_table_all[, rownames(metadata_Y)] # n=65 volunteers
+
+# Taxonomy table
+taxonomy <- read.delim("./data_fig2/drep95_tax.txt", row.names = 1,header = T, sep ="\t")
+taxonomy$Full <- paste(taxonomy$Phylum,taxonomy$Class,taxonomy$Order,taxonomy$Family,taxonomy$Genus,taxonomy$Species, sep = ";")
+
+# Extract only those samples in common between the two tables
+idx <- rownames(MAG_table) %in% rownames(taxonomy)
+MAG_table <- MAG_table[idx, ]
+taxonomy <- taxonomy[rownames(MAG_table), ]
+
+# Rarefraction curve
+sample_rare  <-  function(df, count_cutoff = .01, length =65, rep = 30){  
+  result <- data.frame(sample = c(0), richness = c(0))
+  count <- df
+  # Set MAG table to binary for easy calculate richness
+  count[count < count_cutoff] = 0
+  count[count >= count_cutoff] = 1
+  # Sample number
+  n <- dim(count)[2]
+  # 
+  x <- unique(as.integer(seq(1, 65, length.out = 65)))
+  for (i in x){
+    m <- choose(n, i)
+    if (m > rep){m = rep}
+    # loop list and calculate richness
+    for(j in 1:m) {
+      idx <- sample(n, i)
+      temp <- count[, idx, drop = F]
+      # subset non-zero row
+      temp1 <- temp[rowSums(temp)>0, , drop=F]
+      # row number is accumulative MAGs
+      result <- rbind(result, c(i, dim(temp1)[1]))
+    }
+  }
+  # remove start 0,0
+  result <- result[-1,]
+  # factor draw as each box
+  result$sample <- factor(result$sample, levels = unique(result$sample))
+  return(result)
+}
+rare_box <- sample_rare(MAG_table, count_cutoff = .01, length = 65, rep = 30)
+rare_box$group <- "Y"
+rare_box_Y <- rare_box
+colnames(rare_box_Y) <- c("Number of Samples", "Number of Species","group")
+##############################
+rare_box <- rbind(rare_box_C, rare_box_E, rare_box_L, rare_box_Y)
+# save the data
+write.table(rare_box, paste0("./data_fig2/species", "_rare_curve.txt"), sep = "\t", quote = F, col.names=T,row.names=F, na="")
+#####################################
+# Plot rarefaction curves
+rm(list=ls())
+library(ggplot2)
+# Please calculate median or mean for the sampling data as "Species_rare_curve_average.txt" we provided
+Rare_data <- read.table("./data_fig2/species_rare_curve.txt",sep = "\t",header = T)
+# rename the column names of the rarefaction curve data
+names(Rare_data) <- c("Number_of_samples","Number_of_species","Group")
+Rare_data <- Rare_data %>% group_by(Group,Number_of_samples) %>% mutate(mean=round(mean(Number_of_species),digits=0)) 
+  
+Rare_data$Group <- factor(Rare_data$Group, levels = c("C","L","E","Y"),ordered = T)
+Rare_data <- na.omit(Rare_data)
+dim(Rare_data)
+library(forcats)
+Rare_data$Group <- fct_recode(Rare_data$Group, Centenarian = "C", Offspring = "L", Elderly = "E", Young = "Y")
+# write.table(Rare_data, file = "Rarefaction_data.tsv", sep = "\t", row.names = FALSE)
+library(ggrepel) # Use this package to automatically adjust the position of labels in the graph.
+p <- ggplot(Rare_data, aes(x = Number_of_samples, y = mean, color = Group)) +
+  geom_line(linewidth = 1, show.legend = FALSE) +
+  scale_color_manual(values = c("tomato", "orange", "steelblue", "darkgreen")) +
+  scale_x_continuous(limits = c(0, 120), breaks = seq(0, 120, by = 30)) +
+  theme_bw() +
+  ylab("Number of species") +
+  theme(
+    panel.grid.major = element_line(colour = NA),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    plot.background = element_rect(fill = "transparent", colour = NA),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(size=8),
+    axis.title.y = element_text(size=8),
+    axis.text.x = element_text(size=6),
+    axis.text.y = element_text(size=6)
+  ) +
+  # 在每条线的最后一个点上标注group
+  geom_text_repel(
+    data = Rare_data %>% group_by(Group) %>% slice_max(Number_of_samples),
+    aes(label = Group),
+    show.legend = FALSE,
+    nudge_x = 5,
+    size = 3
+  )
+p
+ggsave("Fig.2A.pdf", p, width = 60, height = 59, units = "mm")
+```
+
+## Fig.2B. PCoA of gut microbiome composition.
+
+```{r beta diversity analysis}
+library(ggplot2)
+library(ape)
+library(tidyverse)
+library(multcomp)
+library(extrafont)
+library(patchwork)
+library(vegan)
+library(reshape2)
+library(ggsci)
+library(scales)
+
+rm(list=ls())
+set.seed(1289)
+MAG_tab <- read.table("./data_fig2/mag_tab.txt",sep = "\t", header = T, row.names = 1)
+MAG_table <- t(MAG_tab)
+dist.df <- vegdist(MAG_table, method = "bray")
+
+pcoa <- pcoa(dist.df, correction = "none", rn=NULL)
+
+groups <- read.table("./data_fig2/metadata.txt",sep="\t",header=TRUE)
+groups$Group[groups$Group == "C"] <- "Centenarian"
+groups$Group[groups$Group == "L"] <- "Offspring"
+groups$Group[groups$Group == "E"] <- "Elderly"
+groups$Group[groups$Group == "Y"] <- "Young"
+
+# View(groups)
+rownames(groups)<-groups$SampleID
+PC1<- pcoa$vectors[,1]
+PC2<- pcoa$vectors[,2]
+
+groups<- groups[match(rownames(pcoa$vectors),rownames(groups)),]
+pcoadata<- data.frame(rownames(pcoa$vectors),PC1,PC2,groups$Group)
+colnames(pcoadata)<-c("sample","PC1","PC2","group")
+# View(pcoadata)
+pcoadata$group %>% unique()
+pcoadata$group<- factor(pcoadata$group,levels=c("Centenarian","Offspring","Elderly","Young"))
+otu.adonis<- adonis2(dist.df~group, data=pcoadata, permutation = 9999)
+# View(otu.adonis)
+write.table(otu.adonis,"beta_bray-curtis_adonis.tsv", sep = "\t", quote = F)
+#####################################################
+# Boxplot
+df <- pcoadata
+df1 <- df %>% group_by(group) %>% summarise(Max = max(PC1))
+df2 <- df %>% group_by(group) %>% summarise(Max = max(PC2))
+df1$Max <- df1$Max + max(df1$Max)*0.1
+df2$Max <- df2$Max + max(df2$Max)*0.1
+tuk1<- aov(PC1~group, data = pcoadata) %>%
+  glht(alternative = "two.sided", linfct = mcp(group = "Tukey")) %>% cld(alpha = 0.05)
+
+tuk2 <- aov(PC2~group, data = pcoadata) %>%
+  glht(alternative = "two.sided", linfct = mcp(group = "Tukey")) %>% cld(alpha = 0.05)
+
+res <- data.frame(PC1=tuk1$mcletters$Letters, PC2 = tuk2$mcletters$Letters, df1 = df1$Max, df2 = df2$Max, group = df1$group)
+res$group <- factor(res$group, levels = c("Centenarian","Offspring","Elderly","Young"))
+# write.table(pcoadata, file = "pcoadata.tsv", sep = "\t", row.names = FALSE)
+# write.table(res, file = "pcoa_stat.tsv", row.names =FALSE, sep = "\t" )
+######################################################
+p1 <- ggplot(pcoadata, aes(PC1, PC2, colour = group))+
+  geom_point(aes(colour = group), size = 1)+
+  labs(x = (floor(pcoa$values$Relative_eig[1]*100)) %>% paste0("PCoA1 ( ", ., "%", ")"), 
+       y = (floor(pcoa$values$Relative_eig[2]*100)) %>% paste0("PCoA2 ( ", ., "%", " )")) +
+  scale_colour_manual(values = c("tomato","orange","steelblue","darkgreen"))+
+  stat_ellipse(aes(PC1, PC2), level = 0.95)+
+  theme(text = element_text(size = 15))+
+  geom_vline(aes(xintercept = 0), linetype = "dotted")+
+  geom_hline(aes(yintercept = 0), linetype = "dotted")+
+  theme(panel.background = element_rect(fill = "white", colour = "black"), 
+        axis.title.x = element_text(colour = "black", size = 15),
+        axis.title.y = element_text(colour = "black", size = 15),
+        axis.text = element_text(colour = "black", size = 12),
+        legend.title = element_blank(),
+        legend.key.height = unit(0.4, "cm"),
+        legend.position = "none",
+        panel.grid = element_blank())
+p1
+################################################
+p2 <- ggplot(pcoadata, aes(group, PC1))+
+  geom_boxplot(aes(fill = group, alpha = 0.1), outlier.colour = NA)+
+  scale_fill_manual(values = c("tomato","orange","steelblue","darkgreen"))+
+  geom_text(data = res, aes(x = group, y = df1, label = PC1),
+            size = 5, color = "black", fontface = "plain")+
+  theme(panel.background = element_rect(fill = "white", colour = "black"), 
+        axis.ticks.length = unit(0.4, "lines"),
+        axis.ticks = element_line(color = "black"),
+        axis.line = element_line(colour = "black"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_text(colour = "black", size = 12, face = "plain"),
+        axis.text.x = element_blank(),
+        legend.position = "none",
+        panel.grid = element_blank())+coord_flip()
+p2
+###############################################################
+p3 <- ggplot(pcoadata, aes(group, PC2))+
+  geom_boxplot(aes(fill=group, alpha = 0.1), outlier.colour = NA)+
+  scale_fill_manual(values = c("tomato","orange","steelblue","darkgreen"))+
+  geom_text(data = res, aes(x=group, y=df2, label = PC2),
+            size = 5, color = "black", fontface = "plain")+
+  theme(panel.background = element_rect(fill = "white", colour = "black"), 
+        axis.ticks.length = unit(0.4, "lines"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(colour = "black", size = 12,
+                                   angle = 90, vjust = 0.5, 
+                                   hjust = 0.5, face = "plain"),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        panel.grid = element_blank())
+p3
+############################################  
+p4 <- ggplot(pcoadata,aes(PC1, PC2))+
+  geom_text(aes(x = -0.5,y = 0.6,
+                label = paste("PERMANOVA:\ndf = ",otu.adonis$Df[1],"\nR2 = ",
+                              round(otu.adonis$R2[1],4),"\np-value = ",
+                              otu.adonis$`Pr(>F)`[1],
+                              sep = "")),size = 3,family = "sans",fontface = 2)+
+  theme_bw() + xlab(NULL) + ylab(NULL) +
+  theme(panel.grid = element_blank(), 
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text = element_blank())
+p4  
+####################################################
+
+p <- p2+p4+p1+p3 + plot_layout(heights = c(1,3),widths = c(3,1),ncol = 2,nrow = 2)
+p  
+ggsave(plot = p,"Fig.2B.pdf",dpi = 600,width = 180,height = 180, units = "mm")  
+
+```
+## Fig.2CD. Network analysis
+
+This section describes feature selection based on prevalence and relative abundance, with thresholds set to 0.75 and 0.0005, respectively. Ultimately, 344 features were retained for subsequent network construction. We further analyzed the topological characteristics of microbial networks across different host groups. The networks of centenarians and the elderly contained substantially more interacting edges than those of young individuals and Offspring. We then identified 273 nodes with consistent interaction patterns, meaning paired nodes maintained either positive or negative correlations across all networks. Among them, 256 nodes belonging to the largest modules were defined as core gut microbes. These microbes are likely key contributors to host health and longevity in the studied cohort.
+
+```{r Network analysis. Abundance and prevalence thresholds selection as well as matrix preparation for correlation and p-value calculation)}
+# step 1. load the count table generated from coverm
+library(Hmisc)
+library(igraph)
+# MAG table：columns are samples，rows are MAGs， magtab.txt table were rarefied from the original count table
+MAG_table_raw <- read.table("./data_fig2/magtab.txt", fill = T, check.names = F, row.names = 1, header=T, sep="\t") 
+# This is the rarefied count table of that generated from Coverm software.
+# In the table, the counts of sequences in all samples were re-sampled to 1,978,028.
+# Load MAG taxonomic table.
+tax_table_raw <- read.table("./data_fig2/drep95_annotation.txt", fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+# Load metadata of the samples.
+meta_table_raw <- read.table("./data_fig2/metadata_rmNA.txt", fill = T, check.names = F, row.names = 1, header = T, sep = "\t")
+###########################################################################################
+MAG_table_c<-MAG_table_raw[,c(rownames(meta_table_raw[meta_table_raw$Group == "C",]))]
+MAG_table_l<-MAG_table_raw[,c(rownames(meta_table_raw[meta_table_raw$Group == "L",]))]
+MAG_table_e<-MAG_table_raw[,c(rownames(meta_table_raw[meta_table_raw$Group == "E",]))]
+MAG_table_y<-MAG_table_raw[,c(rownames(meta_table_raw[meta_table_raw$Group == "Y",]))]
+###########################################################################################
+# MAG prevalence and abundance threshold selection, we follow the reference：https://doi.org/10.1016/j.cell.2024.09.019
+MAG_tab_c <- t(MAG_table_c)
+MAG_tab_l <- t(MAG_table_l)
+MAG_tab_e <- t(MAG_table_e)
+MAG_tab_y <- t(MAG_table_y)
+# Calculate the prevalence of MAGs in samples across different groups (i.e. C-L-E-Y)
+prev_prop_df_c <- apply(X = MAG_tab_c, MARGIN = 2,
+               FUN = function(x){sum(x > 0)/dim(MAG_tab_c)[1]})
+
+prev_prop_df_l <- apply(X = MAG_tab_l, MARGIN = 2,
+                        FUN = function(x){sum(x > 0)/dim(MAG_tab_l)[1]})
+
+prev_prop_df_e <- apply(X = MAG_tab_e,  MARGIN = 2,
+                        FUN = function(x){sum(x > 0)/dim(MAG_tab_e)[1]})
+
+prev_prop_df_y <- apply(X = MAG_tab_y,  MARGIN = 2,
+                        FUN = function(x){sum(x > 0)/dim(MAG_tab_y)[1]})
+################################################################
+df_c<-data.frame(prev_prop_df_c)
+df_l<-data.frame(prev_prop_df_l)
+df_e<-data.frame(prev_prop_df_e)
+df_y<-data.frame(prev_prop_df_y)
+#########################################
+## Prevalence curve 
+########################################
+# Function to calculate prevalence
+calculate_prevalence <- function(data, group_name) {
+  thresholds <- seq(0.01, 1, by = 0.01)
+  prevalence <- sapply(thresholds, function(threshold) sum(data > threshold))
+  data.frame(threshold = thresholds, prevalence = prevalence, group = group_name)
+}
+# Calculate prevalence for each group
+C <- calculate_prevalence(df_c$prev_prop_df_c, "C")
+L <- calculate_prevalence(df_l$prev_prop_df_l, "L")
+E <- calculate_prevalence(df_e$prev_prop_df_e, "E")
+Y <- calculate_prevalence(df_y$prev_prop_df_y, "Y")
+
+# Combine all results into one data frame if needed
+results <- rbind(C, L, E, Y)
+results<-data.frame(results)
+results$group<-factor(results$group,levels=c("C","L","E","Y"))
+#####################################################
+# Abundance curve
+######################################################
+# Calculate the abundance of each MAG in all samples.
+total_relative_abundance = colSums(t(MAG_table_raw))/sum(colSums(t(MAG_table_raw)))
+df_relative<-data.frame(total_relative_abundance)
+options(scipen = 999)
+range(df_relative$total_relative_abundance)
+############################################
+# Function to calculate ralative_abundance
+calculate_rela <- function(data, group_name) {
+  thresholds <- seq(0, 0.074, by = 0.00025)
+  species <- sapply(thresholds, function(threshold) sum(data > threshold))
+  data.frame(threshold = thresholds, species = species, group = group_name)
+}
+# Calculate abundance of MAGs in all samples.
+DF_relative <- calculate_rela(df_relative,"Total")
+DF_relative$threshold<- 100*DF_relative$threshold
+#####################################################################
+# step 2. Threshold used for selection of dominant species
+# Following the reference aformented, we firstly took the MAGs that have prevalence more than 75% in each group for further selection.
+is.above.prev <- prev_prop_df_c > 0.75 & prev_prop_df_l > 0.75 & prev_prop_df_e >0.75 & prev_prop_df_y > 0.75
+table(is.above.prev)
+###########################################################################
+# Select the most abundant species(relative abundance > 0.0005)
+total_relative_abundance = colSums(t(MAG_table_raw))/sum(colSums(t(MAG_table_raw)))
+# Select the MAGs with relative_abundance > 0.0005.
+is.above.abundance <- total_relative_abundance > 0.0005
+table(is.above.abundance)
+# Select the intersection MAGs on the basis of relative_abundance > 0.0005 & prevalence > 75% in each group.
+table(is.above.prev & is.above.abundance)
+target_MAG <- rownames(MAG_table_raw)[is.above.prev & is.above.abundance]
+length(target_MAG)
+##########################################################################
+# Check the total reads number ratio of the selected dominant MAGs in all of the 306 samples.
+target_MAG_table <- MAG_table_raw[target_MAG,]
+reads_ratio_left <- sum(colSums(target_MAG_table))/sum(colSums(MAG_table_raw))
+reads_ratio_left  # 83.60%
+####################################################################
+# We noticed that most (75%) species with a high prevalence in samples of this cohort, and at the same time, when we choose the 0.0005 as the threshold, the species drop slowly than the threshold before, and the remain species with a large amount of sequences count (83.60%), this proportion is convincing that these MAGs (representative species) could represent the dominant member of the gut bacterial community.
+
+# Step 3. Species selection for FastSpar network calculation.
+
+# Write out the MAG tables for further co-abundance association calculation use FastSpar, the calculated association table and their p-value table were further load into the present workspace for network construction using igraph R package.
+# Original table including all the 306 samples.
+
+target_MAG_table <- MAG_table_raw[target_MAG,]
+dir.create("./data_fig2")
+write.table(target_MAG_table,"data_fig2/MAG_tab_for_FastSpar.txt",row.names = T, sep = "\t")
+## Centenarians
+target_MAG_table_c <- MAG_table_c[target_MAG,]
+write.table(target_MAG_table_c,"data_fig2/MAG_tab_for_FastSpar_c.txt",row.names = T, sep = "\t")
+## Offspring
+target_MAG_table_l <- MAG_table_l[target_MAG,]
+write.table(target_MAG_table_l,"data_fig2/MAG_tab_for_FastSpar_l.txt",row.names = T, sep = "\t")
+## Elderly
+target_MAG_table_e <- MAG_table_e[target_MAG,]
+write.table(target_MAG_table_e,"data_fig2/MAG_tab_for_FastSpar_e.txt",row.names = T, sep = "\t")
+## Young
+target_MAG_table_y <- MAG_table_y[target_MAG,]
+write.table(target_MAG_table_y,"data_fig2/MAG_tab_for_FastSpar_y.txt",row.names = T, sep = "\t")
+```
+## Fig.2C, Network construction of the dominant prokaryotic species (MAGs) in the gut of different groups.
+Here, we load the correlation and their corresponding p-value matrix calculated using the FastSpar software.
+(1) Network of the gut prokaryotes of the centenarians
+
+```{r Network analysis (Network construction of the gut prokaryotes of the centenarians)}
+#####################################################################
+# Step 4. Matrix input and network construction of prokaryotes in centenarian
+# Calculate the relative abundance of MAGs within centenarian group.
+total_relative_abundance_c = colSums(t(MAG_table_c))/sum(colSums(t(MAG_table_c)))
+correlation_matrix_r<- read.table("./FastSpar_mydata/median_correlation_c.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r)<- 0
+correlation_matrix_p<- read.table("./FastSpar_mydata/pvalues_c.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+# Thresholding: Retain only significant correlations
+correlation_threshold <- 0 # Adjust as needed
+p_threshold <- 0.001  # Adjust as needed
+
+# Function to generate network table.
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat) # upper triangle data
+  data.frame(
+    source = rownames(cormat)[col(cormat)[ut]],
+    target = rownames(cormat)[row(cormat)[ut]],
+    corr = (cormat)[ut],
+    weight = abs((cormat)[ut]), # absolute value of association 
+                                # coefficient as weight for each MAG pairs.
+    p = pmat[ut],
+    p.adjust = p.adjust(pmat[ut], method="none"), 
+    # since the p-value matrix have been adjusted previously in FastSpar,
+    # here, we don't have to adust the p-value.
+    cor_type = ifelse((cormat)[ut]> 0, "Positive", "Negative")
+  )
+}
+
+cor_df <- CorrDF(correlation_matrix_r , correlation_matrix_p) 
+# generate the data table.
+
+# use which() to index the correlated pairs and remove NA.
+significant_cor_df <- cor_df[which(cor_df$weight >= correlation_threshold & cor_df$p.adjust <= p_threshold),] 
+# remaining the edges with spearman absolute value >0.7 & q-value < 0.001
+table(significant_cor_df$cor_type)
+# unweighted network
+g <- graph_from_data_frame(significant_cor_df, directed=F)
+#################################################################################
+# Check the nodes composition in each networks.
+target_MAG_final_table<-MAG_table_raw[V(g)$name,]
+# View(target_MAG_final_table)
+dim(target_MAG_final_table) # 328 306
+
+# calculate the counts ratio of the dominant MAGs (328) in all samples.
+MAG_core_reads_ratio <- sum(colSums(target_MAG_final_table))/sum(colSums(MAG_table_raw))
+MAG_core_reads_ratio # group C：83.10%；
+##################################################################################
+significant_tax <- tax_table_raw[V(g)$name,]
+significant_tax$Abundance <- total_relative_abundance_c[V(g)$name]
+####################################################################################
+# plot_network(g, ps.prop_above_prev_abund, type = 'taxa', color = "Phylum")
+V(g)$Domain <- significant_tax$Domain                            
+V(g)$Phylum <- significant_tax$Phylum                              
+V(g)$Class <- significant_tax$Class                                
+V(g)$Order <- significant_tax$Order                                
+V(g)$Family <- significant_tax$Family                              
+V(g)$Genus <- significant_tax$Genus                                
+V(g)$Species <- significant_tax$Species                            
+V(g)$Abundance <- significant_tax$Abundance                          
+# Create nodes list
+node_list <- data.frame(node_id = names(V(g)),significant_tax)
+
+# Create edges list
+edge_list <- data.frame(edge_id = paste0("edge_", c(1:length(E(g)))),  significant_cor_df)
+
+table(edge_list$cor_type)
+
+# Network analysis
+
+nodes_num = length(V(g))                   # nodes number
+nodes_num # 328
+
+edges_num = length(E(g))                   # edges number
+edges_num # 11743
+
+positive.corr_num = sum(E(g)$corr>0)        # positive edges number
+positive.corr_num # 6263
+
+positive.corr_prop = positive.corr_num/edges_num 
+# ratio of positive edges in all edges.
+positive.corr_prop # 0.533339
+
+negative.corr_num = sum(E(g)$corr<0)        # negative edges number
+negative.corr_num # 5480
+
+negative.corr_prop = negative.corr_num/edges_num 
+# ratio of the negative edges in all edges.
+negative.corr_prop # 0.466661
+
+average_degree = mean(degree(g))           # average degree
+average_degree # 71.60366
+
+average_shortest_path_length = mean_distance(g, directed = FALSE)     
+# average shortest path length
+average_shortest_path_length # 0.6849
+
+network_diameter = diameter(g, directed = FALSE)                   
+# network diameter
+network_diameter # 1.694
+
+network_density = edge_density(g)                                 
+# network density
+network_density # 0.2189714
+
+modularity = modularity(g, membership(cluster_louvain(g)), directed = F) 
+# network modularity
+modularity # 0.253785
+
+# transitivity：Transitivity measures the probability that the adjacent vertices of a vertex are connected. This is sometimes also called the clustering coefficient.
+# clustering coefficient
+clustering_coefficient <- transitivity(g, type="global")
+clustering_coefficient # 0.6405
+
+# Components
+Components <- components(g)
+Compts<-Components$no
+Compts # 1
+# module composition
+comps_size <- sort(components(g)$csize, decreasing = TRUE)
+comps_size
+## Largest component
+largest.comp<-V(g)[which.max(Components$csize)==Components$membership]
+# largest.comp
+MAG_largest_comp<-names(largest.comp)
+# MAG_largest_comp
+#############################################################################
+##   MAG_largest_comp # used for MAG selection in the largest module.
+####################################################################################
+# Articulation points
+Articulation_Points<-articulation_points(g)
+Articulation_Points
+AP<-Articulation_Points
+
+length(AP)
+network_parameter = data.frame(nodes_num, 
+                               edges_num, 
+                               positive.corr_num,
+                               positive.corr_prop,
+                               negative.corr_num,
+                               negative.corr_prop,
+                               average_degree,
+                               average_shortest_path_length,
+                               network_diameter, 
+                               network_density,
+                               clustering_coefficient,
+                               modularity,
+                               Compts
+)
+
+dir.create("./FastSpar_mydata/result_group_C")
+output_dir = "./FastSpar_mydata/result_group_C"
+
+write.table(node_list, file = file.path(output_dir, "network.node_list_c.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(edge_list, file = file.path(output_dir, "network.edge_list_c.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(network_parameter, file = file.path(output_dir, "network_parameter_c.tsv"), sep = "\t", quote = F, row.names = F)
+write_graph(g, file.path(output_dir, 'network_c.graphml'), format = 'graphml')  # used for visualization in Gephi, here we use the Cotoscape to visualize the result using the "network.node_list.tsv" and "network.edge_list.tsv" files.
+```
+(2) Network of the gut prokaryotes of the Offspring
+
+```{r Network analysis (Network construction of the gut prokaryotes of the lineal descendants of the centenarians)}
+# Step 5. Matrix input and network construction of prokaryotes in lineal descendants.
+# Offspring
+total_relative_abundance_l <- colSums(t(MAG_table_l))/sum(colSums(t(MAG_table_l)))
+correlation_matrix_r<- read.table("./FastSpar_mydata/median_correlation_l.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r)<- 0
+correlation_matrix_p<- read.table("./FastSpar_mydata/pvalues_l.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+
+# Thresholding: Retain only significant correlations
+correlation_threshold <- 0 # Adjust as needed
+p_threshold <- 0.001  # Adjust as needed
+
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat) # upper triangle.
+  data.frame(
+    source = rownames(cormat)[col(cormat)[ut]],
+    target = rownames(cormat)[row(cormat)[ut]],
+    corr = (cormat)[ut],
+    weight = abs((cormat)[ut]), # weights of edges.
+    p = pmat[ut],
+    p.adjust = p.adjust(pmat[ut], method="none"), 
+    cor_type = ifelse((cormat)[ut]> 0, "Positive", "Negative")
+  )
+}
+
+cor_df <- CorrDF(correlation_matrix_r , correlation_matrix_p) # 
+
+significant_cor_df <- cor_df[which(cor_df$weight >= correlation_threshold & cor_df$p.adjust <= p_threshold),] 
+table(significant_cor_df$cor_type)
+
+g <- graph_from_data_frame(significant_cor_df, directed=F)
+############################################################################
+target_MAG_final_table<-MAG_table_raw[V(g)$name,]
+# View(target_MAG_final_table)
+dim(target_MAG_final_table) # 324 306
+
+MAG_core_reads_ratio <- sum(colSums(target_MAG_final_table))/sum(colSums(MAG_table_raw))
+MAG_core_reads_ratio # group L：82.46%; 
+##################################################################################
+significant_tax <- tax_table_raw[V(g)$name,]
+significant_tax$Abundance <- total_relative_abundance_l[V(g)$name] 
+####################################################################################
+# plot_network(g, ps.prop_above_prev_abund, type = 'taxa', color = "Phylum")
+V(g)$Domain <- significant_tax$Domain                          
+V(g)$Phylum <- significant_tax$Phylum                             
+V(g)$Class <- significant_tax$Class                               
+V(g)$Order <- significant_tax$Order                               
+V(g)$Family <- significant_tax$Family                             
+V(g)$Genus <- significant_tax$Genus                               
+V(g)$Species <- significant_tax$Species                            
+V(g)$Abundance <- significant_tax$Abundance                         
+# Nodes list
+node_list <- data.frame(node_id = names(V(g)),significant_tax)
+
+# Edges list
+edge_list <- data.frame(edge_id = paste0("edge_", c(1:length(E(g)))),  significant_cor_df)
+
+table(edge_list$cor_type) # 1965 Neg, 3510 Pos
+
+# Network analysis
+
+nodes_num = length(V(g))                   # nodes number
+nodes_num # 324
+
+edges_num = length(E(g))                   # edges number
+edges_num # 5475
+
+positive.corr_num = sum(E(g)$corr>0)        # positive edges number
+positive.corr_num # 3510
+
+positive.corr_prop = positive.corr_num/edges_num 
+# ratio of the positive edges in all samples.
+positive.corr_prop # 64.11%
+
+negative.corr_num = sum(E(g)$corr<0)        # negative edges number
+negative.corr_num # 1965
+
+negative.corr_prop = negative.corr_num/edges_num 
+# ratio of the negative edges in all samples.
+negative.corr_prop # 35.89%
+
+average_degree = mean(degree(g))           
+# average degree
+average_degree # 33.80%
+
+average_shortest_path_length = mean_distance(g, directed = FALSE)   
+
+average_shortest_path_length # 1.07
+
+network_diameter = diameter(g, directed = FALSE)             
+network_diameter # 3.15
+
+network_density = edge_density(g)                               
+network_density # 0.1046
+
+modularity = modularity(g, membership(cluster_louvain(g)), directed = F)
+modularity # 0.4069428
+
+# Transitivity：transitivity measures the probability that the adjacent vertices of a vertex are connected. This is sometimes also called the clustering coefficient.
+# clustering coefficient
+clustering_coefficient <- transitivity(g, type="global")
+clustering_coefficient # 0.4825963
+
+# Components
+Components <- components(g)
+Compts<-Components$no
+Compts # 1
+
+comps_size <- sort(components(g)$csize, decreasing = TRUE)
+comps_size
+## Largest component
+largest.comp<-V(g)[which.max(Components$csize)==Components$membership]
+# largest.comp
+MAG_largest_comp<-names(largest.comp)
+# MAG_largest_comp
+############################################################################
+# Articulation points
+Articulation_Points<-articulation_points(g)
+Articulation_Points
+AP<-Articulation_Points
+
+length(AP)
+network_parameter = data.frame(nodes_num, 
+                               edges_num, 
+                               positive.corr_num,
+                               positive.corr_prop,
+                               negative.corr_num,
+                               negative.corr_prop,
+                               average_degree,
+                               average_shortest_path_length,
+                               network_diameter, 
+                               network_density,
+                               clustering_coefficient,
+                               modularity,
+                               Compts
+)
+dir.create("./FastSpar_mydata/result_group_L")
+output_dir = "./FastSpar_mydata/result_group_L"
+
+write.table(node_list, file = file.path(output_dir, "network.node_list_l.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(edge_list, file = file.path(output_dir, "network.edge_list_l.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(network_parameter, file = file.path(output_dir, "network_parameter_l.tsv"), sep = "\t", quote = F, row.names = F)
+write_graph(g, file.path(output_dir, 'network_l.graphml'), format = 'graphml')
+```
+(3) Network of the gut prokaryotes of the elderly.
+
+```{r Network analysis (Network construction of the gut prokaryotes of the elderly)}
+# Step 6. Matrix input and network construction of prokaryotes in the elderly
+# Elderly
+total_relative_abundance_e = colSums(t(MAG_table_e))/sum(colSums(t(MAG_table_e)))
+# load data table
+correlation_matrix_r<- read.table("./FastSpar_mydata/median_correlation_e.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r)<- 0
+correlation_matrix_p<- read.table("./FastSpar_mydata/pvalues_e.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+
+# Thresholding: Retain only significant correlations
+correlation_threshold <- 0 # Adjust as needed
+p_threshold <- 0.001  # Adjust as needed
+
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat) # upper triangle
+  data.frame(
+    source = rownames(cormat)[col(cormat)[ut]],
+    target = rownames(cormat)[row(cormat)[ut]],
+    corr = (cormat)[ut],
+    weight = abs((cormat)[ut]), # edges weights
+    p = pmat[ut],
+    p.adjust = p.adjust(pmat[ut], method="none"), 
+    cor_type = ifelse((cormat)[ut]> 0, "Positive", "Negative")
+  )
+}
+
+cor_df <- CorrDF(correlation_matrix_r , correlation_matrix_p) # 
+
+significant_cor_df <- cor_df[which(cor_df$weight >= correlation_threshold & cor_df$p.adjust <= p_threshold),] 
+table(significant_cor_df$cor_type) # 4272 Neg, 5042 Pos
+
+g <- graph_from_data_frame(significant_cor_df, directed=F)
+#################################################################################
+# Check the nodes composition.
+target_MAG_final_table<-MAG_table_raw[V(g)$name,]
+# View(target_MAG_final_table)
+dim(target_MAG_final_table) # 325
+# calculate reads ratio in the total reads.
+MAG_core_reads_ratio <- sum(colSums(target_MAG_final_table))/sum(colSums(MAG_table_raw))
+MAG_core_reads_ratio # E组：82.65% ; 
+##################################################################################
+significant_tax <- tax_table_raw[V(g)$name,]
+significant_tax$Abundance <- total_relative_abundance_e[V(g)$name] 
+############################################################################
+# plot_network(g, ps.prop_above_prev_abund, type = 'taxa', color = "Phylum")
+V(g)$Domain <- significant_tax$Domain                            
+V(g)$Phylum <- significant_tax$Phylum                              
+V(g)$Class <- significant_tax$Class                                
+V(g)$Order <- significant_tax$Order                                
+V(g)$Family <- significant_tax$Family                             
+V(g)$Genus <- significant_tax$Genus                                
+V(g)$Species <- significant_tax$Species                            
+V(g)$Abundance <- significant_tax$Abundance                         
+# nodes list
+node_list <- data.frame(node_id = names(V(g)),significant_tax)
+
+# edges list
+edge_list <- data.frame(edge_id = paste0("edge_", c(1:length(E(g)))),  significant_cor_df)
+table(edge_list$cor_type) # 4272 Neg, 5042 Pos
+
+# Network analysis
+nodes_num = length(V(g))                   # nodes number
+nodes_num # 325
+
+edges_num = length(E(g))                   # edges number
+edges_num # 9314
+
+positive.corr_num = sum(E(g)$corr>0)        # positive edges number
+positive.corr_num # 5042
+
+positive.corr_prop = positive.corr_num/edges_num 
+# ratio of the positive edges in all edges.
+positive.corr_prop # 54.13%
+
+negative.corr_num = sum(E(g)$corr<0)        # negative edges number
+negative.corr_num # 4272
+
+negative.corr_prop = negative.corr_num/edges_num 
+# ratio of the negative edges number in all edges.
+negative.corr_prop # 0.4586644
+
+average_degree = mean(degree(g))           # average degree
+average_degree # 57.31692
+
+average_shortest_path_length = mean_distance(g, directed = FALSE)   
+average_shortest_path_length # 0.8919869
+
+network_diameter = diameter(g, directed = FALSE)                  
+network_diameter # 2.5791
+
+network_density = edge_density(g)                               
+network_density # 0.1769041
+
+modularity = modularity(g, membership(cluster_louvain(g)), directed = F) 
+modularity # 0.2337847
+
+# Transitivity: transitivity measures the probability that the adjacent vertices of a vertex are connected. This is sometimes also called the clustering coefficient.
+# clustering coefficient
+clustering_coefficient <- transitivity(g, type="global")
+clustering_coefficient # 0.5884461
+
+# Components
+Components <- components(g)
+Compts<-Components$no
+Compts # 1
+
+comps_size <- sort(components(g)$csize, decreasing = TRUE)
+comps_size # 325
+## Largest component
+largest.comp<-V(g)[which.max(Components$csize)==Components$membership]
+largest.comp
+MAG_largest_comp<-names(largest.comp)
+# MAG_largest_comp
+############################################################################
+# Articulation points
+Articulation_Points<-articulation_points(g)
+Articulation_Points
+AP<-Articulation_Points
+
+length(AP)
+network_parameter = data.frame(nodes_num, 
+                               edges_num, 
+                               positive.corr_num,
+                               positive.corr_prop,
+                               negative.corr_num,
+                               negative.corr_prop,
+                               average_degree,
+                               average_shortest_path_length,
+                               network_diameter, 
+                               network_density,
+                               clustering_coefficient,
+                               modularity,
+                               Compts
+)
+dir.create("./FastSpar_mydata/result_group_E")
+output_dir = "./FastSpar_mydata/result_group_E"
+
+write.table(node_list, file = file.path(output_dir, "network.node_list_e.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(edge_list, file = file.path(output_dir, "network.edge_list_e.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(network_parameter, file = file.path(output_dir, "network_parameter_e.tsv"), sep = "\t", quote = F, row.names = F)
+write_graph(g, file.path(output_dir, 'network_e.graphml'), format = 'graphml')
+```
+(4) Network of the gut prokaryotes of the young
+
+```{r network analysis (Stage-5: Network construction of the gut prokaryotes of the Non-lineal young)}
+# Step 7. Matrix input and network construction of prokaryotes in the young
+total_relative_abundance_y = colSums(t(MAG_table_y))/sum(colSums(t(MAG_table_y)))
+# Load data table
+correlation_matrix_r<- read.table("./FastSpar_mydata/median_correlation_y.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r)<- 0
+correlation_matrix_p<- read.table("./FastSpar_mydata/pvalues_y.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+
+# Thresholding: Retain only significant correlations
+correlation_threshold <- 0 # Adjust as needed
+p_threshold <- 0.001  # Adjust as needed 0.05 有点太
+
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat) # upper triangle
+  data.frame(
+    source = rownames(cormat)[col(cormat)[ut]],
+    target = rownames(cormat)[row(cormat)[ut]],
+    corr = (cormat)[ut],
+    weight = abs((cormat)[ut]), # association weights
+    p = pmat[ut],
+    p.adjust = p.adjust(pmat[ut], method="none"), 
+    cor_type = ifelse((cormat)[ut]> 0, "Positive", "Negative")
+  )
+}
+
+cor_df <- CorrDF(correlation_matrix_r , correlation_matrix_p) 
+
+significant_cor_df <- cor_df[which(cor_df$weight >= correlation_threshold & cor_df$p.adjust <= p_threshold),] 
+table(significant_cor_df$cor_type) # 2003 Neg, 3617 Pos
+
+g <- graph_from_data_frame(significant_cor_df, directed=F)
+#################################################################################
+target_MAG_final_table<-MAG_table_raw[V(g)$name,]
+# View(target_MAG_final_table)
+dim(target_MAG_final_table) # 319 306
+# reads ratio of the nodes in the network in all samples.
+MAG_core_reads_ratio <- sum(colSums(target_MAG_final_table))/sum(colSums(MAG_table_raw))
+MAG_core_reads_ratio # group Y：82.15%
+##################################################################################
+significant_tax <- tax_table_raw[V(g)$name,]
+significant_tax$Abundance <- total_relative_abundance_y[V(g)$name] 
+####################################################################################
+# plot_network(g, ps.prop_above_prev_abund, type = 'taxa', color = "Phylum")
+V(g)$Domain <- significant_tax$Domain                            
+V(g)$Phylum <- significant_tax$Phylum                             
+V(g)$Class <- significant_tax$Class                               
+V(g)$Order <- significant_tax$Order                              
+V(g)$Family <- significant_tax$Family                           
+V(g)$Genus <- significant_tax$Genus                             
+V(g)$Species <- significant_tax$Species                         
+V(g)$Abundance <- significant_tax$Abundance                     
+# nodes list
+node_list <- data.frame(node_id = names(V(g)),significant_tax)
+
+# edges list
+edge_list <- data.frame(edge_id = paste0("edge_", c(1:length(E(g)))),  significant_cor_df)
+
+table(edge_list$cor_type) # 2003 Neg, 3617 Pos
+
+# Network analysis
+
+nodes_num = length(V(g))                   # nodes number
+nodes_num # 319 
+
+edges_num = length(E(g))                   # edges number
+edges_num # 5620
+
+positive.corr_num = sum(E(g)$corr>0)        # positive edges number
+positive.corr_num # 3617
+
+positive.corr_prop = positive.corr_num/edges_num 
+# ratio of the positive edges in all edges.
+positive.corr_prop # 64.36%
+
+negative.corr_num = sum(E(g)$corr<0)        # negative edges number
+negative.corr_num # 2003
+
+negative.corr_prop = negative.corr_num/edges_num 
+# ratio of the negative edges in all edges.
+negative.corr_prop # 35.64%
+
+average_degree = mean(degree(g))          
+average_degree # 35.24
+
+average_shortest_path_length = mean_distance(g, directed = FALSE)     
+average_shortest_path_length # 1.058399
+
+network_diameter = diameter(g, directed = FALSE)                  
+network_diameter # 2.8987
+
+network_density = edge_density(g)                                
+network_density # 0.1108
+
+modularity = modularity(g, membership(cluster_louvain(g)), directed = F) 
+modularity # 0.3674
+
+# Transitivity：transitivity measures the probability that the adjacent vertices of a vertex are connected. This is sometimes also called the clustering coefficient.
+# clustering coefficient
+clustering_coefficient <- transitivity(g, type="global")
+clustering_coefficient # 0.5330604
+
+# Components
+Components <- components(g)
+Compts<-Components$no
+Compts # 1
+
+comps_size <- sort(components(g)$csize, decreasing = TRUE)
+comps_size # 319
+## Largest component
+largest.comp<-V(g)[which.max(Components$csize)==Components$membership]
+# largest.comp
+MAG_largest_comp<-names(largest.comp)
+# MAG_largest_comp
+############################################################################
+# Articulation points
+Articulation_Points<-articulation_points(g)
+Articulation_Points
+AP<-Articulation_Points
+
+length(AP)
+network_parameter = data.frame(nodes_num, 
+                               edges_num, 
+                               positive.corr_num,
+                               positive.corr_prop,
+                               negative.corr_num,
+                               negative.corr_prop,
+                               average_degree,
+                               average_shortest_path_length,
+                               network_diameter, 
+                               network_density,
+                               clustering_coefficient,
+                               modularity,
+                               Compts
+)
+dir.create("./FastSpar_mydata/result_group_Y")
+output_dir = "./FastSpar_mydata/result_group_Y"
+
+write.table(node_list, file = file.path(output_dir, "network.node_list_y.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(edge_list, file = file.path(output_dir, "network.edge_list_y.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(network_parameter, file = file.path(output_dir, "network_parameter_y.tsv"), sep = "\t", quote = F, row.names = F)
+write_graph(g, file.path(output_dir, 'network_y.graphml'), format = 'graphml')
+```
+(5) Venn diagram analysis across groups
+
+```{r Venndiagram analysis (Stage-6: The selection of the consistently interacted gut prokaryotes across different groups)}
+# calculate relative abundance MAGs in each group.
+total_relative_abundance_c <- colSums(t(MAG_table_c))/sum(colSums(t(MAG_table_c)))
+total_relative_abundance_l <- colSums(t(MAG_table_l))/sum(colSums(t(MAG_table_l)))
+total_relative_abundance_e <- colSums(t(MAG_table_e))/sum(colSums(t(MAG_table_e)))
+total_relative_abundance_y <- colSums(t(MAG_table_y))/sum(colSums(t(MAG_table_y)))
+total_relative_abundance <- colSums(t(MAG_table_raw))/sum(colSums(t(MAG_table_raw)))
+#################################################################################
+# Load the correlation matrix and their corresponding p-value matrix
+##################################################################
+correlation_matrix_r_C<- read.table("./FastSpar_mydata/median_correlation_c.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_C)<- 0
+correlation_matrix_p_C<- read.table("./FastSpar_mydata/pvalues_c.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+correlation_matrix_r_L<- read.table("./FastSpar_mydata/median_correlation_l.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_L)<- 0
+correlation_matrix_p_L<- read.table("./FastSpar_mydata/pvalues_l.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+######################################################################
+correlation_matrix_r_E<- read.table("./FastSpar_mydata/median_correlation_e.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_E)<- 0
+correlation_matrix_p_E<- read.table("./FastSpar_mydata/pvalues_e.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+correlation_matrix_r_Y<- read.table("./FastSpar_mydata/median_correlation_y.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_Y)<- 0
+correlation_matrix_p_Y<- read.table("./FastSpar_mydata/pvalues_y.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+# correlation and its p-value matrix on all samples.
+correlation_matrix_r<- read.table("./FastSpar_mydata/median_correlation.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r)<- 0
+correlation_matrix_p<- read.table("./FastSpar_mydata/pvalues.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+# Thresholding: Retain only significant correlations
+correlation_threshold <- 0 # Adjust as needed
+p_threshold <- 0.001  # Adjust as needed
+
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat) # upper triangle
+  data.frame(
+    source = rownames(cormat)[col(cormat)[ut]],
+    target = rownames(cormat)[row(cormat)[ut]],
+    corr = (cormat)[ut],
+    weight = abs((cormat)[ut]), # correlation weights
+    p = pmat[ut],
+    p.adjust = p.adjust(pmat[ut], method="none"), 
+    cor_type = ifelse((cormat)[ut]> 0, "Positive", "Negative")
+  )
+}
+##################################################################
+cor_df_C <- CorrDF(correlation_matrix_r_C, correlation_matrix_p_C) 
+dim(cor_df_C)
+# 54285 pairs
+cor_df_L <- CorrDF(correlation_matrix_r_L, correlation_matrix_p_L)
+dim(cor_df_L)
+# 54285 pairs
+cor_df_E <- CorrDF(correlation_matrix_r_E, correlation_matrix_p_E)
+dim(cor_df_E)
+# 54285 pairs
+cor_df_Y <- CorrDF(correlation_matrix_r_Y, correlation_matrix_p_Y)
+dim(cor_df_Y)
+# 54285 pairs
+cor_df_whole<- CorrDF(correlation_matrix_r, correlation_matrix_p)
+dim(cor_df_whole)
+####################################################################
+#generate a new column called pairs, concatenated with the columns of "source", "target", and the "cor_type" by "_".
+cor_df_C$pairs <- paste(cor_df_C$source,cor_df_C$target,cor_df_C$cor_type, sep = "__")
+cor_df_L$pairs <- paste(cor_df_L$source,cor_df_L$target,cor_df_L$cor_type, sep = "__")
+cor_df_E$pairs <- paste(cor_df_E$source,cor_df_E$target,cor_df_E$cor_type, sep = "__")
+cor_df_Y$pairs <- paste(cor_df_Y$source,cor_df_Y$target,cor_df_Y$cor_type, sep = "__")
+cor_df_whole$pairs <- paste(cor_df_whole$source,cor_df_whole$target, cor_df_whole$cor_type, sep = "__")
+####################################################################
+significant_cor_df_C <- cor_df_C[which(cor_df_C$weight >= correlation_threshold & cor_df_C$p.adjust <= p_threshold),] 
+table(significant_cor_df_C$cor_type) # 5480 Neg, 6263 Pos,
+range(significant_cor_df_C$weight) # 0.259-0.946
+############################################################
+significant_cor_df_L <- cor_df_L[which(cor_df_L$weight >= correlation_threshold & cor_df_L$p.adjust <= p_threshold),]
+table(significant_cor_df_L$cor_type) # 1965 Neg, 3510 Pos
+range(significant_cor_df_L$weight) # 0.335-0.964
+#############################################################
+significant_cor_df_E <- cor_df_E[which(cor_df_E$weight >= correlation_threshold & cor_df_E$p.adjust <= p_threshold),]
+table(significant_cor_df_E$cor_type) # 4272 Neg, 5042 Pos
+range(significant_cor_df_E$weight) # 0.325-0.966
+##############################################################
+significant_cor_df_Y <- cor_df_Y[which(cor_df_Y$weight >= correlation_threshold & cor_df_Y$p.adjust <= p_threshold),]
+table(significant_cor_df_Y$cor_type) # 2003 Neg, 3617 Pos
+range(significant_cor_df_Y$weight)  # 0.330-0.975
+##############################################################
+significant_cor_df_whole <- cor_df_whole[which(cor_df_whole$weight >= correlation_threshold & cor_df_whole$p.adjust <= p_threshold),]
+table(significant_cor_df_whole$cor_type) # 12311 Neg, 11117 Pos
+range(significant_cor_df_whole$weight)
+###############################################################
+# Venndiagram analysis the unique pairs across groups for the positive edges.
+Positive_C_tab <- significant_cor_df_C[which(significant_cor_df_C$cor_type== "Positive"),]
+Positive_L_tab <- significant_cor_df_L[which(significant_cor_df_L$cor_type== "Positive"),]
+Positive_E_tab <- significant_cor_df_E[which(significant_cor_df_E$cor_type== "Positive"),]
+Positive_Y_tab <- significant_cor_df_Y[which(significant_cor_df_Y$cor_type== "Positive"),]
+Positive_whole_tab<- significant_cor_df_whole[which(significant_cor_df_whole$cor_type=="Positive"),]
+Positive_tab <-list("Positive_C"=Positive_C_tab$pairs,
+                          "Positive_L"=Positive_L_tab$pairs,
+                          "Positive_E"=Positive_E_tab$pairs,
+                          "Positive_Y"=Positive_Y_tab$pairs)
+
+#################################################################
+# # Venndiagram analysis the unique pairs across groups for the negative edges.
+Negative_C_tab <- significant_cor_df_C[which(significant_cor_df_C$cor_type == "Negative"),]
+Negative_L_tab <- significant_cor_df_L[which(significant_cor_df_L$cor_type== "Negative"),]
+Negative_E_tab <- significant_cor_df_E[which(significant_cor_df_E$cor_type == "Negative"),]
+Negative_Y_tab <- significant_cor_df_Y[which(significant_cor_df_Y$cor_type== "Negative"),]
+
+Negative_tab <-list("Negative_C"=Negative_C_tab$pairs,
+                    "Negative_L"=Negative_L_tab$pairs,
+                    "Negative_E"=Negative_E_tab$pairs,
+                    "Negative_Y"=Negative_Y_tab$pairs)
+
+```
+(6) Consistently interacted community across groups
+
+```{r Network analysis (Stage-7: core microbes across different networks)}
+# Relative abundance calculation for the MAGs in each group.
+total_relative_abundance_c = colSums(t(MAG_table_c))/sum(colSums(t(MAG_table_c)))
+total_relative_abundance_l = colSums(t(MAG_table_l))/sum(colSums(t(MAG_table_l)))
+total_relative_abundance_e = colSums(t(MAG_table_e))/sum(colSums(t(MAG_table_e)))
+total_relative_abundance_y = colSums(t(MAG_table_y))/sum(colSums(t(MAG_table_y)))
+total_relative_abundance =colSums(t(MAG_table_raw))/sum(colSums(t(MAG_table_raw)))
+############################################################################
+correlation_matrix_r_C<- read.table("./FastSpar_mydata/median_correlation_c.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_C)<- 0
+correlation_matrix_p_C<- read.table("./FastSpar_mydata/pvalues_c.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+correlation_matrix_r_L<- read.table("./FastSpar_mydata/median_correlation_l.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_L)<- 0
+correlation_matrix_p_L<- read.table("./FastSpar_mydata/pvalues_l.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+######################################################################
+correlation_matrix_r_E<- read.table("./FastSpar_mydata/median_correlation_e.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_E)<- 0
+correlation_matrix_p_E<- read.table("./FastSpar_mydata/pvalues_e.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+correlation_matrix_r_Y<- read.table("./FastSpar_mydata/median_correlation_y.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r_Y)<- 0
+correlation_matrix_p_Y<- read.table("./FastSpar_mydata/pvalues_y.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+# correlation and p-value matrix of all samples.
+correlation_matrix_r<- read.table("./FastSpar_mydata/median_correlation.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+diag(correlation_matrix_r)<- 0
+correlation_matrix_p<- read.table("./FastSpar_mydata/pvalues.tsv",fill = T, check.names = F, row.names = 1, header=T, sep="\t")
+#####################################################################
+# Thresholding: Retain only significant correlations
+correlation_threshold <- 0 # Adjust as needed
+p_threshold <- 0.001  # Adjust as needed
+
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat) # upper triangle
+  data.frame(
+    source = rownames(cormat)[col(cormat)[ut]],
+    target = rownames(cormat)[row(cormat)[ut]],
+    corr = (cormat)[ut],
+    weight = abs((cormat)[ut]), 
+    p = pmat[ut],
+    p.adjust = p.adjust(pmat[ut], method="none"), 
+    cor_type = ifelse((cormat)[ut]> 0, "Positive", "Negative")
+  )
+}
+##################################################################
+cor_df_C <- CorrDF(correlation_matrix_r_C, correlation_matrix_p_C) 
+dim(cor_df_C)
+# 54285 pairs
+cor_df_L <- CorrDF(correlation_matrix_r_L, correlation_matrix_p_L)
+dim(cor_df_L)
+# 54285 pairs
+cor_df_E <- CorrDF(correlation_matrix_r_E, correlation_matrix_p_E)
+dim(cor_df_E)
+# 54285 pairs
+cor_df_Y <- CorrDF(correlation_matrix_r_Y, correlation_matrix_p_Y)
+dim(cor_df_Y)
+# 54285 pairs
+cor_df_whole<- CorrDF(correlation_matrix_r, correlation_matrix_p)
+dim(cor_df_whole)
+####################################################################
+#generate a new column called pairs, concatenated with the columns of "source", "target", and the "cor_type" by "_".
+cor_df_C$pairs <- paste(cor_df_C$source,cor_df_C$target,cor_df_C$cor_type, sep = "__")
+cor_df_L$pairs <- paste(cor_df_L$source,cor_df_L$target,cor_df_L$cor_type, sep = "__")
+cor_df_E$pairs <- paste(cor_df_E$source,cor_df_E$target,cor_df_E$cor_type, sep = "__")
+cor_df_Y$pairs <- paste(cor_df_Y$source,cor_df_Y$target,cor_df_Y$cor_type, sep = "__")
+cor_df_whole$pairs <- paste(cor_df_whole$source,cor_df_whole$target, cor_df_whole$cor_type, sep = "__")
+####################################################################
+significant_cor_df_C <- cor_df_C[which(cor_df_C$weight >= correlation_threshold & cor_df_C$p.adjust <= p_threshold),] 
+table(significant_cor_df_C$cor_type) # 5480 Neg, 6264 Pos,
+range(significant_cor_df_C$weight) # 0.259-0.946
+############################################################
+significant_cor_df_L <- cor_df_L[which(cor_df_L$weight >= correlation_threshold & cor_df_L$p.adjust <= p_threshold),]
+table(significant_cor_df_L$cor_type) # 1965 Neg, 3510 Pos
+range(significant_cor_df_L$weight) # 0.335-0.964
+#############################################################
+significant_cor_df_E <- cor_df_E[which(cor_df_E$weight >= correlation_threshold & cor_df_E$p.adjust <= p_threshold),]
+table(significant_cor_df_E$cor_type) # 4272 Neg, 5042 Pos
+range(significant_cor_df_E$weight) # 0.325-0.966
+##############################################################
+significant_cor_df_Y <- cor_df_Y[which(cor_df_Y$weight >= correlation_threshold & cor_df_Y$p.adjust <= p_threshold),]
+table(significant_cor_df_Y$cor_type) # 2003 Neg, 3617 Pos
+range(significant_cor_df_Y$weight)  # 0.330-0.975
+###############################################################
+library(dplyr)
+# Select the consistently associated pairs.
+MAG_pairs <- intersect(significant_cor_df_C$pairs,significant_cor_df_L$pairs) %>% intersect(significant_cor_df_E$pairs) %>% intersect(significant_cor_df_Y$pairs)
+length(MAG_pairs)
+################################################################
+significant_cor_df_whole <- cor_df_whole[which(cor_df_whole$weight >= correlation_threshold & cor_df_whole$p.adjust <= p_threshold),]
+table(significant_cor_df_whole$cor_type) # 12311 Neg, 11117 Pos
+range(significant_cor_df_whole$weight) # 0.148-0.965
+######################################################################
+# Select the core microbes (MAGs)
+significant_cor_df_whole_final <- significant_cor_df_whole %>% filter(pairs %in% MAG_pairs)
+table(significant_cor_df_whole_final$cor_type)  # 216 Neg, 1572 Pos
+range(significant_cor_df_whole_final$weight)  # 0.3549-0.965
+######################################################################
+# construct the network of the core microbes.
+g <- graph_from_data_frame(significant_cor_df_whole_final, directed=F)
+#################################################################################
+# check the node composition
+target_MAG_final_table<-MAG_table_raw[V(g)$name,]
+# View(target_MAG_final_table)
+dim(target_MAG_final_table) # 273 306
+# reads ratio of the selected core microbes in all samples.
+MAG_core_reads_ratio <- sum(colSums(target_MAG_final_table))/sum(colSums(MAG_table_raw))
+MAG_core_reads_ratio # reads ratio：73.98%
+##################################################################################
+significant_tax <- tax_table_raw[V(g)$name,]
+significant_tax$Abundance <- total_relative_abundance[V(g)$name] #
+###########################################################################
+# plot_network(g, ps.prop_above_prev_abund, type = 'taxa', color = "Phylum")
+V(g)$Domain <- significant_tax$Domain                            
+V(g)$Phylum <- significant_tax$Phylum                             
+V(g)$Class <- significant_tax$Class                              
+V(g)$Order <- significant_tax$Order                              
+V(g)$Family <- significant_tax$Family                            
+V(g)$Genus <- significant_tax$Genus                              
+V(g)$Species <- significant_tax$Species                         
+V(g)$Abundance <- significant_tax$Abundance                       
+# nodes list
+node_list <- data.frame(node_id = names(V(g)),significant_tax)
+
+# edge list
+edge_list <- data.frame(edge_id = paste0("edge_", c(1:length(E(g)))),  significant_cor_df_whole_final)
+
+table(edge_list$cor_type)
+# 216 Negative, 1572 Positive
+# Network analysis
+
+nodes_num = length(V(g))                   # nodes number
+nodes_num # 273
+
+edges_num = length(E(g))                   # edges number
+edges_num # 1788
+
+positive.corr_num = sum(E(g)$corr>0)        # positive edges number
+positive.corr_num # 1572
+
+positive.corr_prop = positive.corr_num/edges_num 
+# ratio of the positive edges in all edges.
+positive.corr_prop # 87.92%
+
+negative.corr_num = sum(E(g)$corr<0)        
+# negative edges number
+negative.corr_num # 216
+
+negative.corr_prop = negative.corr_num/edges_num 
+# ratio of the negative edges in all edges.
+negative.corr_prop # 12.08%
+
+average_degree = mean(degree(g))          
+average_degree # 13.10
+
+average_shortest_path_length = mean_distance(g, directed = FALSE)     
+average_shortest_path_length # 1.98
+
+network_diameter = diameter(g, directed = FALSE)                  
+network_diameter # 5.19
+
+network_density = edge_density(g)                              
+network_density # 0.048
+
+modularity = modularity(g, membership(cluster_louvain(g)), directed = F) 
+modularity # 0.657
+
+# Transitivity：transitivity measures the probability that the adjacent vertices of a vertex are connected. This is sometimes also called the clustering coefficient.
+# Clustering coefficient
+clustering_coefficient <- transitivity(g, type="global")
+clustering_coefficient # 0.572
+
+# Components
+Components <- components(g)
+Compts<-Components$no
+Compts # 8
+
+comps_size <- sort(components(g)$csize, decreasing = TRUE)
+comps_size
+## Largest component
+largest.comp<-V(g)[which.max(Components$csize)==Components$membership]
+# largest.comp
+MAG_largest_comp<-names(largest.comp)
+MAG_largest_comp[1:10]
+#
+dir.create("./FastSpar_mydata/result_whole/")
+write.table(MAG_table_raw[MAG_largest_comp,], file="./FastSpar_mydata/result_whole/MAG_Largest_comp.tsv", sep = "\t", quote = F, row.names = T)
+write.table(tax_table_raw[MAG_largest_comp,], file = "./FastSpar_mydata/result_whole/MAG_tax_table_core.tsv", sep = "\t", quote = F, row.names = T)
+############################################################################
+network_parameter = data.frame(nodes_num, 
+                               edges_num, 
+                               positive.corr_num,
+                               positive.corr_prop,
+                               negative.corr_num,
+                               negative.corr_prop,
+                               average_degree,
+                               average_shortest_path_length,
+                               network_diameter, 
+                               network_density,
+                               clustering_coefficient,
+                               modularity,
+                               Compts
+)
+dir.create("./FastSpar_mydata/result_common")
+output_dir = "./FastSpar_mydata/result_common"
+
+write.table(node_list, file = file.path(output_dir, "network.node_list_whole.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(edge_list, file = file.path(output_dir, "network.edge_list_whole.tsv"), sep = "\t", quote = F, row.names = F)
+write.table(network_parameter, file = file.path(output_dir, "network_parameter_whole.tsv"), sep = "\t", quote = F, row.names = F)
+write_graph(g, file.path(output_dir, 'network_whole.graphml'), format = 'graphml')  
+```
+## Fig.2E. Capability of the core microbiome in distinguish centenarian from the other volunteer individuals.
+```{r}
+# devtools::install_github("WandeRum/multiROC")
+# devtools::install_github("cran/dummies")
+library(multiROC)
+library(randomForest)
+library(nnet)
+library(dummies)
+library(ggplot2)
+library(caret)
+
+## data manipulation
+## data separation
+# load MAG table
+MAG_tab<- read.table("./data_fig2/MAG_Largest_comp_grouped.tsv",fill = T, check.names = F, 
+                     row.names = 1, header=T, sep="\t",stringsAsFactors = T)
+set.seed(123456)
+# 75% data as training data, 25% data left as testing data
+trainIndex <- createDataPartition(MAG_tab$Group, p = 0.75, list = FALSE)
+train_df <- MAG_tab[trainIndex, ]
+test_df <- MAG_tab[-trainIndex, ]
+nrow(train_df);nrow(test_df)
+
+## machine learning
+## random forest
+################################################################################
+# predicting centenarians or non-centenarians
+MAG_tab$longevity<- ifelse(MAG_tab$Group == "C","C","other")
+MAG<-MAG_tab[,-1]
+MAG$longevity<-as.factor(MAG$longevity)
+set.seed(123456)
+# training set and testing set partition based 0.75 and 0.25
+trainIndex <- createDataPartition(MAG$longevity, p = 0.75, list = FALSE)
+train_df <- MAG[trainIndex, ]
+test_df <- MAG[-trainIndex, ]
+nrow(train_df);nrow(test_df)
+
+## machine leanring prediction
+## random forest
+set.seed(123456)
+rf_res <- randomForest(longevity~., data = train_df, ntree = 1000)
+rf_res
+
+rf_pred <- predict(rf_res, test_df,type='prob')
+rf_pred <- data.frame(rf_pred)
+colnames(rf_pred) <- paste(colnames(rf_pred),"_pred_RF")
+
+## combine the true and predicted value
+true_label <- dummies::dummy(test_df$longevity, sep =".")
+true_label <- data.frame(true_label)
+colnames(true_label) <- gsub(".*?\\.","", colnames(true_label))
+colnames(true_label) <- paste(colnames(true_label),"_true")
+final_df <- cbind(true_label, rf_pred)
+
+# calculate multiROC and multiPR
+roc_res <- multi_roc(final_df, force_diag=T)
+unlist(roc_res$AUC)
+
+pr_res <- multi_pr(final_df, force_diag=T)
+unlist(pr_res$AUC)
+
+## ROC curves
+library(dplyr)
+plot_roc_df <- plot_roc_data(roc_res) %>% as.data.frame()
+plot_roc_df_g<-plot_roc_df[plot_roc_df$Group!="Macro" & plot_roc_df$Group!="Micro",] %>%
+  as.data.frame()
+
+plot_roc_df_g_centenarian <- plot_roc_df_g[1:77,]
+# write.table(plot_roc_df_g_centenarian, file = "centenarian_prediction_acuracy.tsv", sep = "\t", row.names = F)
+########################################################################
+p<-ggplot(plot_roc_df_g_centenarian, aes(x = 1 - Specificity, y = Sensitivity)) +
+  geom_path(aes(color = Group, linetype = Method), size = .5) +
+  scale_color_manual(values = c("tomato", "darkgreen")) +
+  geom_segment(aes(x = 0, y = 0, xend = 1, yend = 1),
+               colour = 'grey', linetype = 'dashed') +
+  # theme_test() +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.justification = c(1, 0), legend.position = c(.95, .05),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill = NULL, size = 0.5,
+                                         linetype = "solid", colour = "black")) +
+  annotate("text", x = 0.95, y = 0, label = "AUC(C) = 0.856", 
+           hjust = .9, vjust = 0, size = 3, color = "black")+
+  theme_test()
+p
+pdf("./Fig.2E.pdf", height = 10, width = 14)
+p
+dev.off()
+```
+
+## Fig.2F. Differential analysis of the prokaryotic consistent modulators in gut across different groups.
+
+### (1) Differential analysis between group pairs
+```{r Differential test}
+library(ggClusterNet)
+library(phyloseq)
+library(tidyverse)
+# otu<-read.table("./data_fig2/abundance_count.tsv",header=TRUE,sep="\t",row.names=1)
+meta_tab<-read.table("./data_fig2/metadata_rmNA.txt",header=TRUE,sep="\t",row.names=1)
+taxonomy<-read.table("./data_fig2/drep95_annotation.txt",header=TRUE,sep="\t",row.names=1)
+taxonomy$Species2<-ifelse(taxonomy$Species!="s__",taxonomy$Species,rownames(taxonomy))
+otutab<-read.table("./data_fig2/mag_tab.txt",sep="\t",header=TRUE,row.names=1)
+MAG_large<-read_tsv("./data_fig2/MAG_Largest_comp.tsv")
+MAG_tab<-otutab[MAG_large$MAG,]
+taxonomy<-taxonomy[MAG_large$MAG,]
+#########################################################################
+# for codes annotated using "#" between 1702-1738, we only recommend runing in Rstudio mode, not under the Rmd mode, because the function "sample_data" we used here in the phyloseq Package can't work successfully when press the above Knit.
+# so, here we provided the ".RData" file we provided in the following directory. Like the code in lines 1734 and 1739 to load the MAG_table and metadata of each group pair (here: E vs C)
+# construct the "ps1" file
+ps1 <- phyloseq(sample_data(meta_tab),
+              otu_table(as.matrix(MAG_tab), taxa_are_rows=TRUE),
+              tax_table(as.matrix(taxonomy))#,
+              # phy_tree(tree),
+              # refseq(rep)
+)
+# save(ps1,file="./data_fig2/ps1.RData")
+# load("./data_fig2/ps1.RData")
+# # pairwise comparison.
+# map<- phyloseq::sample_data(ps1)
+# save(map,file="./data_fig2/map.RData")
+# load("./data_fig2/map.RData")
+# head(map)
+# id.g = map$Group %>% unique() %>% as.character() %>% combn(2)
+##########################################################################
+# id.g
+# Differential analysis: C vs E
+# i =1
+#--differential analysis method：Aldex2#--------
+library(ALDEx2)
+# ASV_table = ps1 %>%
+#   filter_taxa(function(x) sum(x ) > 0 , TRUE) %>%
+#   subset_samples(Group %in% id.g[,i]) %>%
+#   vegan_otu() %>% t() %>%
+#   as.data.frame()
+# save(ASV_table, file="./data_fig2/MAG_table_EC.RData")
+load("./data_fig2/MAG_table_EC.RData")
+# groupings <- ps1 %>%
+#   subset_samples(Group%in% id.g[,i]) %>%
+#   sample_data()
+# save(groupings,file="./data_fig2/groupings_EC.RData")
+load("./data_fig2/groupings_EC.RData")
+groupings$ID = row.names(groupings)
+results <- aldex(reads=ASV_table, conditions = groupings$Group,
+                 mc.samples = 128,
+                 test="t",
+                 effect=TRUE,
+                 include.sample.summary = FALSE,
+                 verbose=T,
+                 denom="all")
+
+head(results) 
+# thereafter shows the effect size of the group C vs E.
+# the adjusted p-value of Weilch's t test of MAGs as the significant species between group C and E. p threshold are 0.005
+tab.d1 = results %>%
+  as.data.frame() %>%
+  dplyr::filter(we.eBH < 0.005 & wi.eBH<0.005) %>% rownames_to_column(var = "id") %>%
+  dplyr::select(id,wi.eBH) %>%
+  dplyr::rename(
+    OTU = id,
+    p = wi.eBH
+  ) %>%
+  dplyr::mutate(methods = "Aldex2")
+
+dir.create("./data_fig2/different")
+write.table(results, file="./data_fig2/different/Aldex2-EC.txt", quote=FALSE, sep='\t', col.names = NA)
+write.table(tab.d1, file="./data_fig2/different/Aldex2-1EC.txt", quote=FALSE, sep='\t', col.names = NA)
+# #############################################################################
+# id.g
+# # Differential analysis: C vs Y
+# i =5
+library(ALDEx2)
+# ASV_table = ps1 %>%
+#   filter_taxa(function(x) sum(x ) > 0 , TRUE) %>%
+#   subset_samples(Group %in% id.g[,i]) %>%
+#   vegan_otu() %>% t() %>%
+#   as.data.frame()
+# save(ASV_table, file = "./data_fig2/MAG_table_CY.RData")
+load("./data_fig2/MAG_table_CY.RData")
+# groupings <- ps1 %>%
+#   subset_samples(Group%in% id.g[,i]) %>%
+#   sample_data()
+# save(groupings,file="./data_fig2/groupings_CY.RData")
+load("./data_fig2/groupings_CY.RData")
+groupings$ID = row.names(groupings)
+results <- aldex(reads=ASV_table, conditions = groupings$Group,
+                 mc.samples = 128,
+                 test="t",
+                 effect=TRUE,
+                 include.sample.summary = FALSE,
+                 verbose=T,
+                 denom="all")
+
+head(results)
+
+tab.d1 = results %>%
+  as.data.frame() %>%
+  dplyr::filter(we.eBH < 0.005 & wi.eBH<0.005) %>% rownames_to_column(var = "id") %>%
+  dplyr::select(id,wi.eBH) %>%
+  dplyr::rename(
+    OTU = id,
+    p = wi.eBH
+  ) %>%
+  dplyr::mutate(methods = "Aldex2")
+
+dir.create("./data_fig2/different")
+write.table(results, file="./data_fig2/different/Aldex2-CY.txt", quote=FALSE, sep='\t', col.names = NA)
+write.table(tab.d1, file="./data_fig2/different/Aldex2-1CY.txt", quote=FALSE, sep='\t', col.names = NA)
+# ###############################################################################
+# id.g
+# # Differential analysis: C vs L
+# i =4
+library(ALDEx2)
+# ASV_table = ps1 %>%
+#   filter_taxa(function(x) sum(x ) > 0 , TRUE) %>%
+#   subset_samples(Group %in% id.g[,i]) %>%
+#   vegan_otu() %>% t() %>%
+#   as.data.frame()
+# save(ASV_table, file = "./data_fig2/MAG_table_CL.RData")
+load("./data_fig2/MAG_table_CL.RData")
+# groupings <- ps1 %>%
+#   subset_samples(Group%in% id.g[,i]) %>%
+#   sample_data()
+# save(groupings,file="./data_fig2/groupings_CL.RData")
+load("./data_fig2/groupings_CL.RData")
+groupings$ID = row.names(groupings)
+results <- aldex(reads=ASV_table, conditions = groupings$Group,
+                 mc.samples = 128,
+                 test="t",
+                 effect=TRUE,
+                 include.sample.summary = FALSE,
+                 verbose=T,
+                 denom="all")
+
+head(results) 
+
+tab.d1 = results %>%
+  as.data.frame() %>%
+  dplyr::filter(we.eBH < 0.005 & wi.eBH<0.005) %>% rownames_to_column(var = "id") %>%
+  dplyr::select(id,wi.eBH) %>%
+  dplyr::rename(
+    OTU = id,
+    p = wi.eBH
+  ) %>%
+  dplyr::mutate(methods = "Aldex2")
+
+dir.create("./data_fig2/different")
+write.table(results, file="./data_fig2/different/Aldex2-CL.txt", quote=FALSE, sep='\t', col.names = NA)
+write.table(tab.d1, file="./data_fig2/different/Aldex2-1CL.txt", quote=FALSE, sep='\t', col.names = NA)
+# ###########################################################################
+# id.g
+# # Differential analysis: E vs Y
+# i =3
+
+library(ALDEx2)
+# ASV_table = ps1 %>%
+#   filter_taxa(function(x) sum(x ) > 0 , TRUE) %>%
+#   subset_samples(Group %in% id.g[,i]) %>%
+#   vegan_otu() %>% t() %>%
+#   as.data.frame()
+# save(ASV_table, file="./data_fig2/MAG_table_EY.RData")
+load("./data_fig2/MAG_table_EY.RData")
+# groupings <- ps1 %>%
+# subset_samples(Group%in% id.g[,i]) %>%
+# sample_data()
+# save(groupings,file="./data_fig2/groupings_EY.RData")
+load("./data_fig2/groupings_EY.RData")
+groupings$ID = row.names(groupings)
+
+results <- aldex(reads=ASV_table, conditions = groupings$Group,
+                 mc.samples = 128,
+                 test="t",
+                 effect=TRUE,
+                 include.sample.summary = FALSE,
+                 verbose=T,
+                 denom="all")
+
+head(results) 
+
+tab.d1 = results %>%
+  as.data.frame() %>%
+  dplyr::filter(we.eBH < 0.005 & wi.eBH<0.005) %>% rownames_to_column(var = "id") %>%
+  dplyr::select(id,wi.eBH) %>%
+  dplyr::rename(
+    OTU = id,
+    p = wi.eBH
+  ) %>%
+  dplyr::mutate(methods = "Aldex2")
+
+dir.create("./data_fig2/different")
+write.table(results, file="./data_fig2/different/Aldex2-EY.txt", quote=FALSE, sep='\t', col.names = NA)
+write.table(tab.d1, file="./data_fig2/different/Aldex2-1EY.txt", quote=FALSE, sep='\t', col.names = NA)
+# #######################################################################################
+# ALDEx2分析的CE/CY组差异菌中共有菌
+CY_DIF<-read.table("./data_fig2/different/Aldex2-1CY.txt",header=T,row.names=1,sep="\t")
+EC_DIF<-read.table("./data_fig2/different/Aldex2-1EC.txt",header=T,row.names=1,sep="\t")
+CL_DIF<-read.table("./data_fig2/different/Aldex2-1CL.txt",header=T,row.names=1,sep="\t")
+DIFinC<-intersect(CY_DIF$OTU,EC_DIF$OTU) %>% intersect(CL_DIF$OTU)
+length(DIFinC)
+
+# 读入差异分析表
+EC_DIF_TAB<-read.table("./data_fig2/different/Aldex2-EC.txt",header=T,row.names=1,sep="\t")
+CY_DIF_TAB<-read.table("./data_fig2/different/Aldex2-CY.txt",header=T,row.names=1,sep="\t")
+EY_DIF_TAB<-read.table("./data_fig2/different/Aldex2-EY.txt",header=T,row.names=1,sep="\t")
+CL_DIF_TAB<-read.table("./data_fig2/different/Aldex2-CL.txt",header=T,row.names=1,sep="\t")
+# 选出共有差异菌EC
+EC_DIF_TAB_COMM<-EC_DIF_TAB[DIFinC,c(2,3,6,11)] 
+EC_DIF_TAB_COMM<-EC_DIF_TAB_COMM %>% sort_by(EC_DIF_TAB_COMM$effect,decreasing=TRUE)
+# 选择效应值正值top15和负值top15的物种展示
+EC_DIF_TAB_COMM<-EC_DIF_TAB_COMM[c(1:35),]
+dim(EC_DIF_TAB_COMM)
+names(EC_DIF_TAB_COMM)
+colnames(EC_DIF_TAB_COMM)[4]<-"p_value"
+names(EC_DIF_TAB_COMM)
+#####################################################
+# CY
+CY_DIF_TAB_COMM<-CY_DIF_TAB[DIFinC,c(2,3,6,11)]
+CY_DIF_TAB_COMM<-CY_DIF_TAB_COMM[rownames(EC_DIF_TAB_COMM),]
+colnames(CY_DIF_TAB_COMM)[4]<-"p_value"
+names(CY_DIF_TAB_COMM)
+dim(CY_DIF_TAB_COMM)
+###########################################################
+# EY
+EY_DIF_TAB_COMM<-EY_DIF_TAB[DIFinC,c(2,3,6,11)]
+EY_DIF_TAB_COMM<-EY_DIF_TAB_COMM[rownames(EC_DIF_TAB_COMM),]
+colnames(EY_DIF_TAB_COMM)[4]<-"p_value"
+############################################################
+# CL
+CL_DIF_TAB_COMM<-CL_DIF_TAB[DIFinC,c(2,3,6,11)]
+CL_DIF_TAB_COMM<-CL_DIF_TAB_COMM[rownames(EC_DIF_TAB_COMM),]
+colnames(CL_DIF_TAB_COMM)[4]<-"p_value"
+################################################################################
+# 校对比较关系
+##################
+# C vs L
+CL_DIF_TAB_COMM$Group<-"CvsL"
+CL_DIF_TAB_COMM$Effect<- -CL_DIF_TAB_COMM$effect
+CL_DIF_TAB_COMM<-CL_DIF_TAB_COMM[,c(5,6,4)]
+##################
+# C vs E
+EC_DIF_TAB_COMM$Group<-"CvsE"
+EC_DIF_TAB_COMM$Effect<- -EC_DIF_TAB_COMM$effect
+EC_DIF_TAB_COMM<-EC_DIF_TAB_COMM[,c(5,6,4)]
+################
+# C vs Y
+CY_DIF_TAB_COMM$Group<-"CvsY"
+CY_DIF_TAB_COMM$Effect<- -CY_DIF_TAB_COMM$effect
+CY_DIF_TAB_COMM<-CY_DIF_TAB_COMM[,c(5,6,4)]
+################
+# E vs Y
+EY_DIF_TAB_COMM$Group<-"EvsY"
+EY_DIF_TAB_COMM$Effect<- -EY_DIF_TAB_COMM$effect
+EY_DIF_TAB_COMM<-EY_DIF_TAB_COMM[,c(5,6,4)]
+##################################################
+EC_DIF_TAB_COMM$MAG<-rownames(EC_DIF_TAB_COMM)
+CL_DIF_TAB_COMM$MAG<-rownames(CL_DIF_TAB_COMM)
+CY_DIF_TAB_COMM$MAG<-rownames(CY_DIF_TAB_COMM)
+EY_DIF_TAB_COMM$MAG<-rownames(EY_DIF_TAB_COMM)
+###给行名编号
+rownames(EC_DIF_TAB_COMM)<-1:35
+rownames(CL_DIF_TAB_COMM)<-36:70
+rownames(CY_DIF_TAB_COMM)<-71:105
+rownames(EY_DIF_TAB_COMM)<-106:140
+###合并为一个表
+difference_species<-rbind(EC_DIF_TAB_COMM,CL_DIF_TAB_COMM,CY_DIF_TAB_COMM,EY_DIF_TAB_COMM)
+df_tab<-difference_species[,c(4,1,2,3)]
+write.table(df_tab, file="./data_fig2/different/difference_species2.txt", quote=FALSE, sep='\t', col.names = NA)
+```
+
+### (2) Calculating prevalence of species
+```{r Calculating prevalence}
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(reshape2)
+library(ggprism)
+library(plyr)
+library(magrittr)
+library(ggfun)
+library(cowplot)
+################################################################
+# calculating prevalence
+# Load data
+data_prokaryotes <- read.table("./data_fig2/mag_tab.txt", sep = "\t", header = TRUE, row.names=1,check.names = FALSE)
+design_C <- read.table("./data_fig2/different/design_C.txt", sep = "\t", header = TRUE, row.names = 1)
+design_C<- design_C %>% dplyr::select(Group)
+design_C$sample_new<-rownames(design_C)
+dim(design_C)
+design_L <- read.table("./data_fig2/different/design_L.txt", sep = "\t", header = TRUE, row.names = 1) %>% dplyr::select("Group")
+design_L$sample_new<-rownames(design_L)
+dim(design_L)
+design_E <- read.table("./data_fig2/different/design_E.txt", sep = "\t", header = TRUE, row.names = 1) %>% dplyr::select("Group")
+design_E$sample_new<-rownames(design_E)
+dim(design_E)
+design_Y <- read.table("./data_fig2/different/design_Y.txt", sep = "\t", header = TRUE, row.names = 1) %>% dplyr::select("Group")
+design_Y$sample_new<-rownames(design_Y)
+dim(design_Y)
+#########################
+difference_species<-read.table("./data_fig2/different/difference_species.csv",header=T,sep=",",row.names=1)
+# View(difference_species)
+rownames(difference_species)<-difference_species$ID
+dim(difference_species)
+
+data_prokaryotes01 <- data_prokaryotes %>% apply(2, function(x) x / sum(x))
+data_prokaryotes02 <- as.data.frame(t(data_prokaryotes01))
+
+# Function to process each design group
+process_design <- function(design, data_prokaryotes02, all_counts_value) {
+  data_prokaryotes_group <- data_prokaryotes02[rownames(data_prokaryotes02) %in% rownames(design), ] %>% t() %>% as.data.frame()
+  
+  zero_counts <- rowSums(data_prokaryotes_group == 0)
+  data_species2 <- data_prokaryotes_group %>%
+    mutate(zero_counts = zero_counts,
+           sample_percent = round(1 - zero_counts / all_counts_value, 6))
+  
+  data_species3 <- data_species2[rownames(data_species2) %in% rownames(difference_species), ]
+  return(data_species3)
+}
+##############################################################
+# Process each design group and write to CSV
+# C
+data_species3_C <- process_design(design_C, data_prokaryotes02, 108)
+# View(data_species3_C)
+write.csv(data_species3_C, "./data_fig2/different/prevalence_C.csv")
+###############################################################
+# L
+data_species3_L <- process_design(design_L, data_prokaryotes02, 61)
+# View(data_species3_L)
+write.csv(data_species3_L, "./data_fig2/different/prevalence_L.csv")
+#################################################################
+# E
+data_species3_E <- process_design(design_E, data_prokaryotes02, 72)
+# View(data_species3_E)
+write.csv(data_species3_E, "./data_fig2/different/prevalence_E.csv")
+#################################################################
+# Y
+data_species3_Y <- process_design(design_Y, data_prokaryotes02, 65)
+# View(data_species3_Y)
+write.csv(data_species3_Y, "./data_fig2/different/prevalence_Y.csv")
+```
+### (3) Calculating relative abundance of species
+```{r Calculating relative abundance}
+library(dplyr)
+##################
+data_rare <- read.table("./data_fig2/mag_tab.txt", sep = "\t", header = TRUE, check.names = FALSE,row.names=1)
+# View(data_rare)
+colSums(data_rare)[1:10]
+rel_tab<-data_rare %>% (function(x) x/colSums(x))
+# View(rel_tab)
+colSums(rel_tab)[1:10]
+###############
+Meta<-read.table("./data_fig2/metadata_rmNA.txt",sep="\t",header=T,check.names=FALSE)
+# View(Meta)
+Meta_C<-Meta[Meta$Group=="C",]
+dim(Meta_C)
+Meta_L<-Meta[Meta$Group=="L",]
+dim(Meta_L)
+Meta_E<-Meta[Meta$Group=="E",]
+dim(Meta_E)
+Meta_Y<-Meta[Meta$Group=="Y",]
+dim(Meta_Y)
+################## select MAG_table of each group
+rel_tab_C<-rel_tab[,c(Meta_C$SampleID)]
+rel_tab_L<-rel_tab[,c(Meta_L$SampleID)]
+rel_tab_E<-rel_tab[,c(Meta_E$SampleID)]
+rel_tab_Y<-rel_tab[,c(Meta_Y$SampleID)]
+################### generate the means column
+rel_tab_C$species_C_mean<-rowMeans(rel_tab_C)
+rel_tab_L$species_L_mean<-rowMeans(rel_tab_L)
+rel_tab_E$species_E_mean<-rowMeans(rel_tab_E)
+rel_tab_Y$species_Y_mean<-rowMeans(rel_tab_Y)
+##### combine the original table with the new columns.
+otutab<-cbind(rel_tab,rel_tab_C$species_C_mean,rel_tab_L$species_L_mean,
+              rel_tab_E$species_E_mean,rel_tab_Y$species_Y_mean)
+dim(otutab)
+colnames(otutab)[307:310]<-c("species_C_mean","species_L_mean",
+                             "species_E_mean","species_Y_mean")
+################################################################
+# selection the differential species (MAGs)
+otutab_mean<-otutab[,307:310]
+# View(otutab_mean)
+##################
+library(tidyr)
+differ_species<-read.table("./data_fig2/different/difference_species.csv",sep=",",row.names=1,header=T)
+# View(differ_species)
+otutab_mean_final<-otutab_mean[c(differ_species$ID),]
+dim(otutab_mean_final)
+otutab_mean_final$MAG<-rownames(otutab_mean_final)
+prevalence2<-otutab_mean_final %>%
+  pivot_longer(cols=c(species_C_mean,species_L_mean,
+                      species_E_mean,species_Y_mean),
+               names_to="Group",values_to="RA")
+prevalence2<-prevalence2 %>% sort_by(prevalence2$Group)
+prevalence2$Group<-c(rep("Centenarian",35),rep("Elderly",35),
+                     rep("Offspring",35),rep("Young",35))
+#########################################################################
+write.table(prevalence2, file="./data_fig2/different/prevalence2.txt", 
+            quote=FALSE, sep='\t', col.names = NA)
+
+```
+### (4) Heatmapbarplot of the differential species
+```{r heatmapbarplot}
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(reshape2)
+library(ggprism)
+library(plyr)
+library(magrittr)
+library(ggfun)
+library(cowplot)
+##########################################################################
+# 
+# Load data
+data1 <- read.table("./data_fig2/difference_species2.txt",header = TRUE,row.names = 1,sep = "\t")
+data1[which(data1$p_value<0.01),'sig'] <- '*'
+data1[which(data1$p_value<0.001),"sig"]<-"**"
+data1[which(data1$p_value<0.0001),"sig"]<-"***"
+
+# load the ordered differential species (order by effect size of each species)
+level<-read.csv("./data_fig2/levels.csv",header=TRUE,sep=",")
+list=level$levels
+list
+# Set order
+data1$Species2 = factor(data1$MAG, levels = rev(list))
+data1 = data1 %>%
+  mutate(Species2 = ordered(Species2,
+                            levels=list
+  ))
+data1$Group<-factor(data1$Group,levels=c("CvsY","CvsL","CvsE","EvsY"))
+# plot
+# data selection
+# data <- data1[(data1$Difference)< -2 | (data1$Difference) > 0.1,]
+# dim(data)
+data<-data1
+# write.table(data,file="data_differential_test.tsv", sep = "\t", row.names = F)
+# Plot
+p1 <- ggplot(data, aes(Group,Species2)) +  
+  geom_tile(aes(fill=Effect), color="white") +    
+  geom_text(aes(label=sig), color="black", size=5,vjust = 0.9) + 
+  scale_fill_gradient2(low='darkgreen', high='red',mid = 'white',name=paste0("Effect.")) +
+  labs(x=NULL,y=NULL) +  
+  theme_classic()+
+  theme(axis.text.x = element_text(size=10,angle = 45,hjust = 1,color = "black"),            
+        axis.text.y = element_text(size=10,color = "black"), 
+        axis.line.x = element_blank(),
+        axis.line.y = element_blank(),
+        axis.ticks.length = unit(2.0, "mm"),
+        panel.background=element_blank(),
+        legend.position = "left")
+p1
+ggsave(paste("./data_fig2/different/age_prokaryotes",".pdf", sep=""), p1, width=89 * 2, height=180 *1.5, unit='mm')
+
+# Bar plot relative abundance
+# 
+imp_species <- read.table("./data_fig2/prevalence2.txt", row.names=1,header = TRUE, sep = "\t")
+imp_species <- imp_species %>%
+  mutate(Species2 = ordered(MAG,
+                            levels=list))
+imp_species$RA<-100*imp_species$RA
+# obtain the unique group names
+# groups <- unique(imp_species$Group)
+groups <- c("Centenarian", "Offspring","Elderly","Young")
+# assign names of each group
+colors <- c("Centenarian" = "tomato", "Offspring"="orange",
+            "Elderly" = "steelblue",  "Young" = "darkgreen")
+# write.table(imp_species, file="imp_speices.tsv", sep = "\t", row.names = F)
+plots <- lapply(seq_along(groups), function(i) {
+  g <- groups[i]
+  p <- ggplot(subset(imp_species, Group == g), aes(x = Species2, y = RA)) +
+    geom_bar(stat = "identity", fill = colors[g]) +
+    coord_flip() +
+    theme_classic() +
+    theme(text = element_text(family = 'sans', size = 14),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          legend.position = "none",
+          axis.line.x = element_blank(),
+          axis.line.y = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1, color = "black"),
+          axis.text.y = element_blank()
+    ) +
+    geom_hline(yintercept = c(0,2,4,6), colour = 'black', lwd = 0.36, linetype = "dashed") +
+    #scale_y_continuous(expand = expansion(0, 0), limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) +
+    #labs(title = paste("Prevalence for", g))
+    facet_set(label=paste(g))
+  
+  if (i != 1) {
+    p <- p + theme(axis.text.y = element_blank(),
+                   axis.ticks.y = element_blank())
+  }
+  
+  return(p)
+})
+
+final_plot2 <- plot_grid(plotlist = plots, ncol = 4, byrow=TRUE, rel_widths = c(1, 1, 1, 1))
+
+#print(final_plot)
+
+library(cowplot)
+p3 <- ggdraw() +
+  draw_plot(p1, 0, 0.01, .35, 0.945)+
+  draw_plot(final_plot2, 0.350, 0.0105, .58, 0.97)
+p3
+pdf("./Fig.2F.pdf", height = 10, width = 14)
+p3
+dev.off()
+```
+```{r}
+sessionInfo()
+```
+
+
