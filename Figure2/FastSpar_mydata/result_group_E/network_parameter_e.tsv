@@ -1,0 +1,2 @@
+nodes_num	edges_num	positive.corr_num	positive.corr_prop	negative.corr_num	negative.corr_prop	average_degree	average_shortest_path_length	network_diameter	network_density	clustering_coefficient	modularity	Compts
+325	9314	5042	0.541335623792141	4272	0.458664376207859	57.3169230769231	0.891986894586904	2.5791	0.17690408357075	0.588446076906511	0.275654186777885	1
