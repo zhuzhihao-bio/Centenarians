@@ -1,0 +1,742 @@
+---
+title: "Fig6"
+author: "Zhihao Zhu(朱志豪), Yong-Xin Liu(刘永鑫 )"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    theme: cerulean
+    highlight: haddock
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    code_fold: show
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(collapse = T,  comment="#>", echo=T, message=F, warning=F)
+```
+
+## Fig.6a. Genome_diff
+Three-way differential analysis comparing A. ihumii with other Alistipes species, the phylum Bacteroidota, and strains from CGBB 
+
+```{r Fig.6a}
+library(pacman)
+library(ggplot2)
+library(ggalluvial)
+library(patchwork)
+library(dplyr)
+library(readxl)
+
+df <- read_excel("Data/a_genome_diff.xlsx")
+
+plot_data <- df %>%
+  arrange(desc(GRatio)) %>% 
+  mutate(
+    logP = -log10(ifelse(P_value == 0, min(P_value[P_value > 0]), P_value)),
+    Description = factor(Description, levels = Description),
+    GeneID = factor(GeneID, levels = unique(GeneID))
+  )
+
+npg_cols <- c("#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F", 
+              "#8491B0", "#91D1C2", "#B09C85", "#BC3C29", "#0072B5")
+
+p1 <- ggplot(plot_data, aes(y = 1, axis1 = GeneID, axis2 = Description)) +
+  geom_alluvium(aes(fill = GeneID, group = Description), 
+                width = 0.1, alpha = 0.5, knot.pos = 0.4) +
+  geom_stratum(aes(fill = GeneID), width = 0.1, color = "white", size = 0.5) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), 
+            size = 3.8, hjust = 1, nudge_x = -0.08, fontface = "plain") +
+  scale_fill_manual(values = npg_cols) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_discrete(expand = expansion(mult = c(0.5, 0))) +
+  coord_cartesian(clip = 'off') +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(t = 10, r = 0, b = 0, l = 20)
+  )
+
+p2 <- ggplot(plot_data, aes(x = GRatio, y = Description)) +
+  geom_point(aes(size = Count, color = logP)) +
+  scale_color_gradientn(colors = c("#313695", "#74add1", "#ffffbf", "#f46d43", "#a50026"), 
+                        name = expression(-log[10](P))) +
+  scale_size_continuous(range = c(2, 8), name = "Gene Count") +
+  scale_x_continuous(expand = expansion(mult = c(0.05, 0.1))) +
+  scale_y_discrete(limits = rev(levels(plot_data$Description)), expand = c(0, 0.4)) +
+  labs(x = "Enrichment Ratio (GRatio)", y = NULL) +
+  theme_bw() + 
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(linewidth = 0.8, fill = NA),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 10, face = "bold"),
+    plot.margin = margin(t = 10, r = 5, b = 10, l = 5)
+  )
+
+final_plot <- p1 + p2 + plot_layout(widths = c(3, 1))
+
+ggsave("Fig.6a.pdf", plot = final_plot, width = 10, height = 6, device = cairo_pdf)
+```
+
+```{r}
+# load Fig.6a
+knitr::include_graphics("./Figures/Fig.6a.pdf")
+```
+
+## Fig.6b. Key metabolic enzyme genes in the flavonoid degradation pathway within the Bacteroidota pangenome
+
+```{r Fig.6b}
+
+library(tidyverse)
+library(pheatmap)
+
+df <- readr::read_csv("Data/b_pangenome.csv")
+gene_order <- c("ramA", "bglX", "Flr", "Fcr", "phy", "Chi")
+
+presence_data <- df %>%
+  filter(mapping_status == "mapped") %>%
+  group_by(species, target_gene) %>%
+  slice_max(bitscore, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(presence_value = case_when(
+    gene_category == "core" ~ 2,
+    gene_category == "accessory" ~ 1,
+    TRUE ~ 0
+  )) %>%
+  select(species, target_gene, presence_value)
+
+heatmap_mat <- expand_grid(
+  species = unique(df$species),
+  target_gene = gene_order
+) %>%
+  left_join(presence_data, by = c("species", "target_gene")) %>%
+  mutate(presence_value = replace_na(presence_value, 0)) %>%
+  pivot_wider(
+    id_cols = species,
+    names_from = target_gene,
+    values_from = presence_value,
+    values_fill = 0
+  ) %>%
+  column_to_rownames("species") %>%
+  select(all_of(gene_order)) %>%
+  as.matrix()
+
+pdf_height <- max(6, nrow(heatmap_mat) * 0.2)
+
+pheatmap(
+  heatmap_mat,
+  filename = "fig6b.pdf",
+  width = 10,
+  height = pdf_height,
+  color = c("white", "#6BAED6", "#D73027"),
+  breaks = c(-0.5, 0.5, 1.5, 2.5),
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  fontsize = 10,
+  fontsize_row = 9,
+  fontsize_col = 10,
+  fontface_row = "italic",
+  cellwidth = 18,
+  cellheight = 13,
+  angle_col = 45,
+  legend = TRUE,
+  legend_breaks = c(0, 1, 2),
+  legend_labels = c(" ", "Accessory", "Core"),
+  border_color = "grey60"
+)
+```
+
+```{r}
+# load Fig.6b
+knitr::include_graphics("./Figures/Fig.6b.pdf")
+```
+
+## Fig.6c. Differential metabolites of targeted flavonoid metabolomics
+Volcano plot of differential metabolites from targeted flavonoid metabolomics of A. ihumii SX-C120 and SX-G294. The size of dots showed the VIP value
+
+```{r Fig.6c}
+library(tidyverse)
+library(readxl)
+library(ggrepel)
+
+theme_set(theme_classic(base_size = 14))
+
+overview_file <- "Data/c_metabolism.xlsx"
+
+data <- read_excel(overview_file)
+id_col   <- "ID"
+name_col <- "compound name"
+sample_cols <- setdiff(names(data), c(id_col, name_col))
+
+data[[id_col]] <- as.character(data[[id_col]])
+data[[name_col]] <- as.character(data[[name_col]])
+
+meta <- tibble(Sample = sample_cols) %>%
+  mutate(Group = sub("_(.*)$", "", Sample)) %>%
+  filter(Group %in% c("GAM", "Y120", "Y294"))
+samples_keep <- meta$Sample
+
+abundance <- data %>% select(all_of(samples_keep)) %>% as.matrix()
+rownames(abundance) <- make.unique(data[[id_col]])
+
+metabolite_anno <- data %>% select(ID = !!id_col, Name = !!name_col) %>%
+  mutate(ID = make.unique(ID))
+
+abund_t <- t(abundance)
+if (any(is.na(abund_t)) || any(abund_t == 0)) {
+  min_pos <- min(abund_t[abund_t > 0], na.rm = TRUE)
+  abund_t[is.na(abund_t)] <- min_pos / 2
+  abund_t[abund_t == 0]   <- min_pos / 2
+}
+log2_abund <- log2(abund_t)
+stopifnot(all(rownames(log2_abund) == meta$Sample))
+
+diff_test <- function(g1, g2) {
+  s1 <- meta %>% filter(Group == g1) %>% pull(Sample)
+  s2 <- meta %>% filter(Group == g2) %>% pull(Sample)
+  m1 <- log2_abund[rownames(log2_abund) %in% s1, , drop = FALSE]
+  m2 <- log2_abund[rownames(log2_abund) %in% s2, , drop = FALSE]
+  res <- lapply(seq_len(ncol(log2_abund)), function(j) {
+    p <- tryCatch(t.test(m1[, j], m2[, j])$p.value, error = function(e) NA)
+    data.frame(ID = colnames(log2_abund)[j],
+               log2FC = mean(m1[, j], na.rm = TRUE) - mean(m2[, j], na.rm = TRUE),
+               pvalue = p)
+  }) %>% bind_rows() %>%
+    mutate(FDR = p.adjust(pvalue, method = "BH"),
+           FDR = ifelse(is.na(FDR) | FDR == 0, 1e-300, FDR),
+           negLog10FDR = -log10(FDR)) %>%
+    left_join(metabolite_anno, by = "ID") %>%
+    mutate(Metabolite = ifelse(is.na(Name) | Name == "", ID, Name))
+  return(res)
+}
+
+res <- diff_test("Y120", "Y294")
+
+volc_data <- res %>%
+  mutate(Regulation = case_when(
+    log2FC > 0  ~ "Up in Y120",
+    log2FC < 0  ~ "Up in Y294",
+    TRUE        ~ "No change"
+  )) %>%
+  mutate(Regulation = factor(Regulation, levels = c("Up in Y120", "Up in Y294", "No change")))
+
+label_df <- volc_data %>% arrange(desc(abs(log2FC))) %>% slice_head(n = 20)
+
+max_abs <- max(abs(volc_data$log2FC), na.rm = TRUE)
+
+p_volcano <- ggplot(volc_data, aes(x = log2FC, y = negLog10FDR, color = Regulation)) +
+  geom_point(alpha = 0.8, size = 4) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
+  scale_color_manual(values = c("Up in Y120" = "#D73027", "Up in Y294" = "#4575B4",
+                                "No change" = "grey70")) +
+  geom_text_repel(data = label_df, aes(label = Metabolite), size = 3,
+                  max.overlaps = 100, box.padding = 0.3, point.padding = 0.2,
+                  segment.color = "grey50") +
+  labs(x = "log2(Fold Change) (Y120 / Y294)",
+       y = expression(-log[10]("FDR")),
+       title = "Volcano plot: Y120 vs Y294") +
+
+  scale_x_continuous(
+    limits = c(-max_abs, max_abs),
+    breaks = seq(floor(-max_abs), ceiling(max_abs), by = 1)
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(linewidth = 0.8, fill = NA),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 11),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(color = "black", size = 11)
+  )
+
+ggsave("Fig6c.pdf", p_volcano, width = 8, height = 6, dpi = 600)
+```
+
+```{r}
+# load Fig.6c
+knitr::include_graphics("./Figures/Fig.6c.pdf")
+```
+
+## Fig.6d. Differential metabolites of targeted flavonoid metabolomics
+Differences in  taxifolin concentrations after 96 hours of culture with A.ihumii SX-C120, determined by targeted flavonoid metabolomics. Ctrl(medium) represents blank medium without strain supplementation as the control group. Each line links paired identical biological replicates between the Ctrl(medium) and SX-C120 treatment groups.
+
+```{r}
+# load Fig.6d
+knitr::include_graphics("./Figures/Fig.6d.pdf")
+```
+
+## Fig.6e. Quantification of taxifolin levels in mice feces
+Fecal levels were determined by ELISA (n = 5).
+
+```{r Fig.6e}
+library(tidyverse)
+library(readxl)
+library(emmeans)
+library(ggsignif)
+
+my_theme <- theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_blank(),         
+    axis.line = element_line(color = "black", linewidth = 0.8), 
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    legend.position = "none",
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(color = "black", size = 11),
+    plot.margin = unit(c(0.8, 0.8, 0.8, 0.8), "cm")
+  )
+
+group_colors <- c(
+  "SAMR1"       = "#BFBEBE",
+  "SAMP8"       = "#00B335",
+  "SX-C120 CFS" = "#E74C3C",
+  "SX-C120 LBC" = "#4287f5"
+)
+
+file_path <- "Data/e_taxifolin.csv"
+df_raw <- read_csv(file_path)
+
+colnames(df_raw)[1] <- "SampleID"
+
+df_long <- df_raw %>%
+  pivot_longer(
+    cols = -SampleID,
+    names_to = "Group",
+    values_to = "Value"
+  ) %>%
+  filter(Group %in% names(group_colors)) %>%
+  mutate(
+    Group = factor(Group, levels = names(group_colors)),
+    Value = Value / 1000  
+  )
+
+fit <- aov(Value ~ Group, data = df_long)
+emm <- emmeans(fit, ~ Group)
+dunnett_res <- contrast(emm, method = "dunnett", ref = "SAMP8") %>% as_tibble()
+
+p2star <- function(p){
+  case_when(
+    p <= 0.001 ~ "***",
+    p <= 0.01  ~ "**",
+    p <= 0.05  ~ "*",
+    TRUE       ~ "ns"
+  )
+}
+
+star1 <- p2star(dunnett_res$p.value[1]) 
+star2 <- p2star(dunnett_res$p.value[2]) 
+star3 <- p2star(dunnett_res$p.value[3]) 
+
+pos1 <- 11.0
+pos2 <- 12.5
+pos3 <- 14.0
+
+p_box <- ggplot(df_long, aes(x = Group, y = Value)) +
+  geom_boxplot(aes(color = Group, fill = Group),
+               alpha = 0.5, width = 0.6, outlier.shape = NA, linewidth = 0.8, fatten = 1.5) +
+  geom_jitter(aes(fill = Group), width = 0.12, size = 3.5, alpha = 0.8, 
+              shape = 21, color = "black", stroke = 0.5) +
+  scale_color_manual(values = group_colors) +
+  scale_fill_manual(values = group_colors) +
+  geom_signif(comparisons = list(c("SAMR1", "SAMP8")), 
+              annotations = star1, y_position = pos1, tip_length = 0.02, textsize = 4.5) +
+  geom_signif(comparisons = list(c("SAMP8", "SX-C120 CFS")), 
+              annotations = star2, y_position = pos2, tip_length = 0.02, textsize = 4.5) +
+  geom_signif(comparisons = list(c("SAMP8", "SX-C120 LBC")), 
+              annotations = star3, y_position = pos3, tip_length = 0.02, textsize = 4.5) +
+  
+  labs(x = NULL, y = "Taxifolin (ng/mL)", title = "Taxifolin Concentration") +
+  scale_y_continuous(
+    limits = c(0, 15.5),              
+    breaks = seq(0, 10, by = 2),      
+    expand = expansion(mult = c(0, 0)) 
+  ) +
+  my_theme
+
+ggsave("Fig6e.pdf", plot = p_box, width = 5, height = 6, dpi = 600)
+```
+
+```{r}
+# load Fig.6e
+knitr::include_graphics("./Figures/Fig.6e.pdf")
+
+# The subsequent drawing of the box line diagram has been modified accordingly on this script
+```
+
+## Fig.6f. Genomic context of the Flr-like sequence
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(stringr)
+
+neighbor_file <- "Data/f_neighborhood_10kb.csv"
+annotation_file <- "Data/f_neighbor_annotation.emapper.annotations"
+
+target_id <- "1_1283"
+
+out_prefix <- "Fig.6f"
+
+
+neighbor <- read_csv(neighbor_file, show_col_types = FALSE)
+
+required_cols <- c("gene_id", "start", "end", "strand", "length_bp", "distance_to_target_bp")
+missing_cols <- setdiff(required_cols, colnames(neighbor))
+
+if (length(missing_cols) > 0) {
+  stop("Missing columns in neighborhood file: ", paste(missing_cols, collapse = ", "))
+}
+
+read_eggnog <- function(file) {
+  lines <- readLines(file)
+  lines2 <- lines[!grepl("^##", lines)]
+  header_idx <- grep("^#query\\t|^#query\\b", lines2)
+  if (length(header_idx) == 0) {
+    stop("Cannot find eggNOG header line starting with #query.")
+  }
+  
+  lines2 <- lines2[header_idx[1]:length(lines2)]
+  tmp <- tempfile(fileext = ".tsv")
+  writeLines(lines2, tmp)
+  anno <- read.delim(
+    tmp,
+    header = TRUE,
+    sep = "\t",
+    quote = "",
+    comment.char = "",
+    check.names = FALSE,
+    fill = TRUE,
+    stringsAsFactors = FALSE
+  )
+  colnames(anno)[colnames(anno) == "#query"] <- "query"
+  return(anno)
+}
+
+anno <- read_eggnog(annotation_file)
+
+cat("eggNOG annotation columns:\n")
+print(colnames(anno))
+
+if (!"query" %in% colnames(anno)) {
+  stop("Column 'query' not found after reading eggNOG file.")
+}
+
+if (!"Description" %in% colnames(anno)) {
+  warning("Column 'Description' not found. Creating empty Description column.")
+  anno$Description <- NA
+}
+
+if (!"PFAMs" %in% colnames(anno)) {
+  warning("Column 'PFAMs' not found. Creating empty PFAMs column.")
+  anno$PFAMs <- NA
+}
+
+anno_simple <- anno %>%
+  dplyr::select(
+    gene_id = query,
+    COG_category,
+    description = Description,
+    PFAMs
+  )
+
+neighbor2 <- neighbor %>%
+  dplyr::left_join(anno_simple, by = "gene_id")
+
+neighbor2$description[is.na(neighbor2$description)] <- "No eggNOG annotation"
+neighbor2$PFAMs[is.na(neighbor2$PFAMs)] <- ""
+
+neighbor2$annot_text <- paste(
+  neighbor2$description,
+  neighbor2$PFAMs,
+  sep = " "
+)
+
+neighbor2$annot_text_lower <- tolower(neighbor2$annot_text)
+
+neighbor2$category <- "Other"
+
+neighbor2$category[neighbor2$gene_id == target_id] <- "Target flr-like"
+
+neighbor2$category[
+  neighbor2$category != "Target flr-like" &
+    str_detect(neighbor2$annot_text_lower, "integrase|phage_integrase|phage integrase")
+] <- "Integrase"
+
+neighbor2$category[
+  neighbor2$category != "Target flr-like" &
+    str_detect(neighbor2$annot_text_lower, "transpos|insertion sequence|is21|istb|dde")
+] <- "Transposase / IS"
+
+neighbor2$category[
+  neighbor2$category != "Target flr-like" &
+    str_detect(neighbor2$annot_text_lower, "relaxase")
+] <- "Relaxase"
+
+neighbor2$category[
+  neighbor2$category != "Target flr-like" &
+    str_detect(neighbor2$annot_text_lower, "mobilisation|mobilization|mobc|\\bmob\\b")
+] <- "Mobilization"
+
+neighbor2$category[
+  neighbor2$category != "Target flr-like" &
+    str_detect(neighbor2$annot_text_lower, "hth|arac|transcriptional regulator")
+] <- "Regulator"
+
+neighbor2$category[
+  neighbor2$category != "Target flr-like" &
+    str_detect(neighbor2$annot_text_lower,
+               "fmn|flavin|flavodoxin|reductase|amidohydrolase|tautomerase|cupin|aldo|keto")
+] <- "Metabolic / redox"
+
+neighbor2$label <- neighbor2$gene_id
+
+neighbor2$label[neighbor2$category == "Integrase"] <- "integrase"
+neighbor2$label[neighbor2$category == "Transposase / IS"] <- "IS21/IstB"
+neighbor2$label[neighbor2$category == "Relaxase"] <- "relaxase"
+neighbor2$label[neighbor2$category == "Mobilization"] <- "MobC"
+neighbor2$label[neighbor2$category == "Regulator"] <- "regulator"
+neighbor2$label[neighbor2$category == "Metabolic / redox"] <- "metabolic"
+neighbor2$label[neighbor2$category == "Target flr-like"] <- "flr-like\n1_1283"
+
+target_row <- neighbor2 %>% dplyr::filter(gene_id == target_id)
+
+if (nrow(target_row) == 0) {
+  stop("Target gene not found in neighbor table: ", target_id)
+}
+
+target_center <- (target_row$start + target_row$end) / 2
+
+neighbor2 <- neighbor2 %>%
+  dplyr::mutate(
+    rel_start_kb = (start - target_center) / 1000,
+    rel_end_kb   = (end   - target_center) / 1000,
+    rel_mid_kb   = (rel_start_kb + rel_end_kb) / 2
+  ) %>%
+  dplyr::arrange(rel_start_kb)
+
+make_arrow_polygon <- function(xmin, xmax, strand, gene_id,
+                               y = 0,
+                               height = 0.38,
+                               head_len = 0.18) {
+  
+  len <- abs(xmax - xmin)
+  hl <- min(head_len, len * 0.45)
+  y_bottom <- y - height / 2
+  y_top    <- y + height / 2
+  
+  if (strand == "+") {
+    x <- c(xmin, xmax - hl, xmax, xmax - hl, xmin)
+    yv <- c(y_bottom, y_bottom, y, y_top, y_top)
+  } else {
+    x <- c(xmax, xmin + hl, xmin, xmin + hl, xmax)
+    yv <- c(y_bottom, y_bottom, y, y_top, y_top)
+  }
+  data.frame(
+    gene_id = gene_id,
+    x = x,
+    y = yv,
+    stringsAsFactors = FALSE
+  )
+}
+
+poly_df <- do.call(
+  rbind,
+  lapply(seq_len(nrow(neighbor2)), function(i) {
+    make_arrow_polygon(
+      xmin = neighbor2$rel_start_kb[i],
+      xmax = neighbor2$rel_end_kb[i],
+      strand = neighbor2$strand[i],
+      gene_id = neighbor2$gene_id[i]
+    )
+  })
+)
+
+poly_df <- poly_df %>%
+  dplyr::left_join(
+    neighbor2 %>% dplyr::select(gene_id, category),
+    by = "gene_id"
+  )
+
+color_map <- c(
+  "Integrase" = "#D73027",
+  "Transposase / IS" = "#FC8D59",
+  "Relaxase" = "#F46D43",
+  "Mobilization" = "#FDAE61",
+  "Regulator" = "#ABDDA4",
+  "Metabolic / redox" = "#74ADD1",
+  "Target flr-like" = "#313695",
+  "Other" = "grey75"
+)
+
+mge_categories <- c("Integrase", "Transposase / IS", "Relaxase", "Mobilization")
+
+mge_genes <- neighbor2 %>%
+  dplyr::filter(category %in% mge_categories)
+
+if (nrow(mge_genes) > 0) {
+  mge_xmin <- min(mge_genes$rel_start_kb)
+  mge_xmax <- max(mge_genes$rel_end_kb)
+} else {
+  mge_xmin <- NA
+  mge_xmax <- NA
+}
+
+metabolic_genes <- neighbor2 %>%
+  dplyr::filter(category %in% c("Target flr-like", "Metabolic / redox"))
+
+if (nrow(metabolic_genes) > 0) {
+  meta_xmin <- min(metabolic_genes$rel_start_kb)
+  meta_xmax <- max(metabolic_genes$rel_end_kb)
+} else {
+  meta_xmin <- NA
+  meta_xmax <- NA
+}
+
+p <- ggplot()
+
+if (!is.na(mge_xmin)) {
+  p <- p +
+    annotate(
+      "rect",
+      xmin = mge_xmin,
+      xmax = mge_xmax,
+      ymin = -0.45,
+      ymax = 0.55,
+      fill = "#FEE0D2",
+      alpha = 0.45
+    ) +
+    annotate(
+      "text",
+      x = (mge_xmin + mge_xmax) / 2,
+      y = 0.72,
+      label = "mobility module",
+      size = 4,
+      color = "#A50F15",
+      fontface = "bold"
+    )
+}
+
+if (!is.na(meta_xmin)) {
+  p <- p +
+    annotate(
+      "rect",
+      xmin = meta_xmin,
+      xmax = meta_xmax,
+      ymin = -0.45,
+      ymax = 0.55,
+      fill = "#DEEBF7",
+      alpha = 0.35
+    ) +
+    annotate(
+      "text",
+      x = (meta_xmin + meta_xmax) / 2,
+      y = -0.72,
+      label = "flr-like / redox-associated module",
+      size = 4,
+      color = "#08519C",
+      fontface = "bold"
+    )
+}
+
+p <- p +
+  geom_polygon(
+    data = poly_df,
+    aes(x = x, y = y, group = gene_id, fill = category),
+    color = "black",
+    linewidth = 0.35
+  ) +
+  geom_text(
+    data = neighbor2,
+    aes(x = rel_mid_kb, y = 0.38, label = label),
+    size = 3.2,
+    angle = 45,
+    hjust = 0,
+    vjust = 0
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    color = "#313695",
+    linewidth = 0.6
+  ) +
+  scale_fill_manual(values = color_map, drop = FALSE) +
+  scale_x_continuous(
+    breaks = seq(
+      floor(min(neighbor2$rel_start_kb)),
+      ceiling(max(neighbor2$rel_end_kb)),
+      by = 2
+    )
+  ) +
+  coord_cartesian(
+    ylim = c(-0.95, 1.15),
+    expand = FALSE
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  labs(
+    title = "Genomic context of SX_C120_1283 flr-like",
+    subtitle = "flr-like is embedded in a mobility-associated genomic region",
+    x = "Position relative to SX_C120_1283 center (kb)",
+    y = ""
+  )
+
+pdf_file <- paste0(out_prefix, ".pdf")
+
+if (capabilities("cairo")) {
+  ggsave(
+    filename = pdf_file,
+    plot = p,
+    width = 13,
+    height = 4,
+    device = cairo_pdf
+  )
+} else {
+  ggsave(
+    filename = pdf_file,
+    plot = p,
+    width = 13,
+    height = 4
+  )
+}
+```
+
+```{r Fig.6f}
+# load Fig.6f
+knitr::include_graphics("./Figures/Fig.6f.pdf")
+```
+
+## Fig.6g. Molecular docking simulation of Flr-like protein with quercetin
+Molecular docking simulation of Flr-like protein with quercetin. Magnified view shows the binding pocket and key binding sites. This figure was generated by PyMOL.
+
+```{r Fig.6g}
+# load Fig.6g
+knitr::include_graphics("./Figures/Fig.6g.pdf")
+```
+
+
+
+
+
+
+

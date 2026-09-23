@@ -1,0 +1,26 @@
+## Wed Jul  1 08:56:23 2026
+## emapper-2.1.13
+## /data1/liuyongxin/miniconda3/envs/eggnog/bin/emapper.py -i 1_1283_neighborhood_protein.faa -o neighbor_annotation --output_dir . --cpu 16 -m diamond
+##
+#query	seed_ortholog	evalue	score	eggNOG_OGs	max_annot_lvl	COG_category	Description	Preferred_name	GOs	EC	KEGG_ko	KEGG_Pathway	KEGG_Module	KEGG_Reaction	KEGG_rclass	BRITE	KEGG_TC	CAZy	BiGG_Reaction	PFAMs
+1_1272	762982.HMPREF9442_03319	9.79e-228	632.0	COG4974@1|root,COG4974@2|Bacteria	2|Bacteria	L	Belongs to the 'phage' integrase family	-	-	-	-	-	-	-	-	-	-	-	-	Arm-DNA-bind_5,Phage_int_SAM_4,Phage_int_SAM_5,Phage_integrase
+1_1273	762982.HMPREF9442_03320	1.17e-275	754.0	COG4974@1|root,COG4974@2|Bacteria,4NFDF@976|Bacteroidetes,2FQ0U@200643|Bacteroidia	976|Bacteroidetes	L	Belongs to the 'phage' integrase family	-	-	-	-	-	-	-	-	-	-	-	-	Arm-DNA-bind_5,Phage_int_SAM_5,Phage_integrase
+1_1274	762982.HMPREF9442_03321	1.59e-140	399.0	28QT7@1|root,2ZD8N@2|Bacteria,4P86C@976|Bacteroidetes,2FZ8R@200643|Bacteroidia	976|Bacteroidetes	-	-	-	-	-	-	-	-	-	-	-	-	-	-	-
+1_1275	762982.HMPREF9442_03323	1.09e-49	157.0	COG3311@1|root,COG3311@2|Bacteria,4NVVY@976|Bacteroidetes,2FV6T@200643|Bacteroidia	976|Bacteroidetes	K	Helix-turn-helix domain	-	-	-	-	-	-	-	-	-	-	-	-	HTH_17
+1_1277	762982.HMPREF9442_03325	1.06e-89	267.0	COG1484@1|root,COG1484@2|Bacteria,4NYCR@976|Bacteroidetes,2FTF2@200643|Bacteroidia	976|Bacteroidetes	L	DNA-dependent DNA replication	-	-	-	ko:K02315	-	-	-	-	ko00000,ko03032	-	-	-	IstB_IS21
+1_1278	411476.BACOVA_05415	1.29e-06	51.6	2E51N@1|root,32ZV1@2|Bacteria,4NW1B@976|Bacteroidetes,2FSD8@200643|Bacteroidia,4AQKW@815|Bacteroidaceae	976|Bacteroidetes	S	Bacterial mobilisation protein (MobC)	-	-	-	-	-	-	-	-	-	-	-	-	MobC
+1_1279	1236514.BAKL01000004_gene578	2.73e-62	209.0	COG3843@1|root,COG3843@2|Bacteria,4NH77@976|Bacteroidetes,2FM27@200643|Bacteroidia,4AKS5@815|Bacteroidaceae	976|Bacteroidetes	U	Relaxase mobilization nuclease domain protein	-	-	-	-	-	-	-	-	-	-	-	-	Relaxase
+1_1281	880074.BARVI_00030	1.28e-161	457.0	COG2207@1|root,COG2207@2|Bacteria,4NGWC@976|Bacteroidetes,2FNH8@200643|Bacteroidia,22XKU@171551|Porphyromonadaceae	976|Bacteroidetes	K	AraC family transcriptional regulator	-	-	-	-	-	-	-	-	-	-	-	-	AraC_binding,HTH_18
+1_1282	742725.HMPREF9450_00395	4.39e-49	159.0	COG2315@1|root,COG2315@2|Bacteria,4NNPR@976|Bacteroidetes,2FSJ2@200643|Bacteroidia	976|Bacteroidetes	S	YjbR	-	-	-	-	-	-	-	-	-	-	-	-	YjbR
+1_1283	411477.PARMER_04311	2e-90	270.0	COG0655@1|root,COG0655@2|Bacteria,4NHHY@976|Bacteroidetes,2FQJ4@200643|Bacteroidia,231T8@171551|Porphyromonadaceae	976|Bacteroidetes	S	NADPH-dependent FMN reductase	-	-	-	-	-	-	-	-	-	-	-	-	FMN_red
+1_1284	349741.Amuc_1808	2.01e-165	471.0	COG2159@1|root,COG2159@2|Bacteria,46WMN@74201|Verrucomicrobia	74201|Verrucomicrobia	S	Amidohydrolase	-	-	4.1.1.52	ko:K22213	-	-	-	-	ko00000,ko01000	-	-	-	Amidohydro_2
+1_1285	483218.BACPEC_00506	2.38e-88	266.0	COG0655@1|root,COG0655@2|Bacteria,1TT84@1239|Firmicutes,248W0@186801|Clostridia,268X1@186813|unclassified Clostridiales	186801|Clostridia	S	NADPH-dependent FMN reductase	-	-	-	-	-	-	-	-	-	-	-	-	FMN_red
+1_1286	86416.Clopa_1075	2.3e-14	67.4	COG1942@1|root,COG1942@2|Bacteria	2|Bacteria	S	isomerase activity	MA20_05500	-	5.3.2.6	ko:K01821	ko00362,ko00621,ko00622,ko01100,ko01120,ko01220,map00362,map00621,map00622,map01100,map01120,map01220	M00569	R03966,R05389	RC01040,RC01355	ko00000,ko00001,ko00002,ko01000	-	-	-	Tautomerase
+1_1287	1158294.JOMI01000001_gene1891	2.23e-96	284.0	COG1853@1|root,COG1853@2|Bacteria,4NPQM@976|Bacteroidetes,2FME8@200643|Bacteroidia	976|Bacteroidetes	S	Flavin reductase like domain	-	-	-	-	-	-	-	-	-	-	-	-	ABM,Flavin_Reduct
+1_1288	1121094.KB894649_gene1295	2.31e-152	432.0	COG0599@1|root,COG1917@1|root,COG0599@2|Bacteria,COG1917@2|Bacteria,4NHTC@976|Bacteroidetes,2FN4M@200643|Bacteroidia,4AK6K@815|Bacteroidaceae	976|Bacteroidetes	S	protein contains double-stranded beta-helix domain	-	-	4.1.1.44	ko:K01607	ko00362,ko01100,ko01120,ko01220,map00362,map01100,map01120,map01220	-	R03470	RC00938	ko00000,ko00001,ko01000	-	-	-	CMD,Cupin_2
+1_1289	1121094.KB894658_gene2609	1.89e-105	310.0	COG0716@1|root,COG0716@2|Bacteria,4PMGA@976|Bacteroidetes,2G0C6@200643|Bacteroidia,4AR9N@815|Bacteroidaceae	976|Bacteroidetes	C	Flavodoxin	-	-	-	-	-	-	-	-	-	-	-	-	Flavodoxin_4
+1_1290	693979.Bache_3121	1.45e-150	432.0	COG0667@1|root,COG0667@2|Bacteria,4NEB0@976|Bacteroidetes,2FRJT@200643|Bacteroidia,4ASYV@815|Bacteroidaceae	976|Bacteroidetes	C	aldo keto reductase	-	-	-	-	-	-	-	-	-	-	-	-	Aldo_ket_red
+1_1292	880074.BARVI_02305	0.0	969.0	COG1672@1|root,COG1672@2|Bacteria,4NGWE@976|Bacteroidetes,2G2FK@200643|Bacteroidia,22XI0@171551|Porphyromonadaceae	976|Bacteroidetes	S	ATPase domain predominantly from Archaea	-	-	-	ko:K06921	-	-	-	-	ko00000	-	-	-	ATPase_2,DUF234
+## 18 queries scanned
+## Total time (seconds): 6.15266227722168
+## Rate: 2.93 q/s
