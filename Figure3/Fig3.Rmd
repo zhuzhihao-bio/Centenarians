@@ -1,0 +1,172 @@
+---
+title: "Fig3"
+author: "Zhihao Zhu(朱志豪), Yong-Xin Liu(刘永鑫 )"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    theme: cerulean
+    highlight: haddock
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    code_fold: show
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(collapse = T,  comment="#>", echo=T, message=F, warning=F)
+```
+
+## Fig.3a. Diagram of CGBB constructio
+This figure is manually drawn by Biorender (https://app.biorender.com) 
+
+```{r Fig.3a}
+# load Fig.3a
+knitr::include_graphics("./Figures/Fig.3a.pdf")
+```
+
+## Fig.3b. Phylogenetic tree of 16S rDNA
+16S analysis process follows the EasyAmplicon pipeline (https://doi.org/10.1002/imt2.83), Tree editing using online websites iTOL (https://itol.embl.de)
+
+```{r Fig.3b}
+# load Fig.3b
+knitr::include_graphics("./Figures/Fig.3b.pdf")
+```
+
+## Fig.3c. Phylogenetic tree of 1557 genomes
+Genome analysis process follows the EasyMetagenome pipeline (https://doi.org/10.1002/imt2.83) and EasyGenome (unpublished), Tree editing using online websites iTOL (https://itol.embl.de)
+
+```{r Fig.3c}
+# load Fig.3c
+knitr::include_graphics("./Figures/Fig.3c.pdf")
+```
+
+## Fig.3d. Species Venn diagram of CGBB, CGR2 and HGG
+This figure is manually drawn by Evenn (https://www.bic.ac.cn/test/venn/#/)
+
+```{r Fig.3d}
+# load Fig.3d
+knitr::include_graphics("./Figures/Fig.3d.pdf")
+```
+
+## Fig.3e. Venn diagram depicting overlapping metagenomes and genomes
+This figure is manually drawn by Evenn (https://www.bic.ac.cn/test/venn/#/)
+
+```{r Fig.3e}
+# load Fig.3e
+knitr::include_graphics("./Figures/Fig.3e.pdf")
+```
+
+## Fig.3f. Relative abundance of A. ihumii
+The relative abundance of A. ihumii across different age groups. Wilcox rank sum test.
+
+```{r Fig.3f}
+library(ggplot2)
+library(tidyverse)
+library(agricolae)
+library(car)
+library(reshape2)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+
+############################
+df <- read_excel("./Data/f_Alistipes ihumii.xlsx")
+names(df) <- c("SamplesID",
+               "Alistipes_ihumii_count",
+               "Rarefied_samples_total_counts",
+               "Relative_abundance_of_Alistipes_ihumii",
+               "Group")
+df$Group <- factor(df$Group,
+                   levels = c("Centenarian","Offspring","Elderly","Young"))
+
+############################
+tapply(df$Relative_abundance_of_Alistipes_ihumii,
+       df$Group,
+       shapiro.test)
+bartlett.test(Relative_abundance_of_Alistipes_ihumii ~ Group, data = df)
+
+############################
+variance <- with(df,
+                 kruskal(Relative_abundance_of_Alistipes_ihumii,
+                         Group,
+                         group = TRUE,
+                         p.adj = "bon"))
+mark <- as.data.frame(variance$groups)
+mark$Group <- rownames(mark)
+############################
+stat.test <- df %>%
+  wilcox_test(Relative_abundance_of_Alistipes_ihumii ~ Group,
+              p.adjust.method = "bonferroni") %>%
+  add_significance()
+stat.test <- stat.test %>%
+  add_xy_position(x = "Group")
+
+############################
+df$log_abundance <- log10(df$Relative_abundance_of_Alistipes_ihumii + 1e-6)
+mark$y_offset <- max(df$log_abundance) * 1.05
+
+############################
+p1 <- ggplot(df,
+             aes(x = Group,
+                 y = log_abundance,
+                 fill = Group)) +
+  geom_boxplot(width = 0.55,
+               outlier.shape = NA,
+               alpha = 0.8,
+               color = "black") +
+  geom_jitter(aes(color = Group),
+              width = 0.18,
+              size = 2,
+              alpha = 0.6,
+              show.legend = FALSE) +
+  scale_fill_manual(values = c("tomato",
+                               "orange",
+                               "steelblue",
+                               "darkgreen")) +
+  scale_color_manual(values = c("tomato",
+                                "orange",
+                                "steelblue",
+                                "darkgreen")) +
+  geom_text(data = mark,
+            aes(x = Group,
+                y = y_offset,
+                label = groups),
+            inherit.aes = FALSE,
+            size = 6,
+            fontface = "bold") +
+  xlab("") +
+  ylab(expression(log[10]*"(Relative abundance + 1e-6)")) +
+  theme_classic(base_size = 15) +
+  theme(
+    axis.text = element_text(size = 13),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    legend.position = "none"
+  )
+ggsave("Fig.3f.pdf", p1, width = 183, height = 119, units = "mm")
+```
+
+```{r}
+# load Fig.3f
+knitr::include_graphics("./Figures/Fig.3f.pdf")
+```
+
+
+## Fig.3g. Comparative analysis of orthologous gene families
+This figure is manually drawn by Evenn (https://www.bic.ac.cn/test/venn/#/)
+
+```{r Fig.3g}
+# load Fig.3g
+knitr::include_graphics("./Figures/Fig.3g.pdf")
+```
+
+## Fig.3h. Whole-genome collinearity analysis of the A. ihumii strains
+This figure revealed the genomic heterogeneity between SX_C120 and SX_G294 (data of NGS), Results ganerated by Orthofinder
+
+```{r Fig.3h}
+# load Fig.3h
+knitr::include_graphics("./Figures/Fig.3h.pdf")
+```
