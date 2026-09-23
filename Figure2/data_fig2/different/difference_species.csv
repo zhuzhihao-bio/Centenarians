@@ -1,0 +1,36 @@
+seq,ID,Species
+1,Sg_A27_31,Anaerobutyricum hallii
+2,Sg_B04_2,Fusicatenibacter saccharivorans
+3,Sg_D18_45,Anaerostipes hadrus
+4,Sg_M12_6,Blautia_A massiliensis
+5,Sg_A11_10,Hominisplanchenecus faecis
+6,Sg_YB37_28,Oliverpabstia intestinalis
+7,Sg_OB03r2_39,Blautia_A sp905209435
+8,Sg_OB24r1_18,Mediterraneibacter faecis
+9,Gp_MJ4_197,Blautia_A sp000436615
+10,Gp_NH_148,Schaedlerella sp900066545
+11,Sg_K36_16,Blautia_A wexlerae
+12,Sg_K15_44,Sg_K15_44
+13,Sg_M02_5,Blautia stercoris
+14,Sg_P27_36,Faecalibacillus intestinalis
+15,Sg_OA11r1_9,Mediterraneibacter lactaris
+16,Sg_Z17_26,Alistipes communis
+17,Sg_CM33A_60,ER4 sp003522105
+18,Sg_M07_27,CAG-177 sp000431775
+19,Sg_OM21r1_55,Vescimonas sp900545495
+20,Sg_B07_53,Bacteroides fragilis
+21,Sg_K36_3,Bacteroides eggerthii
+22,Sg_E06_10,Vescimonas sp900545585
+23,Sg_Z03_24,Alistipes shahii
+24,Sg_CK52A_43,CAG-170 sp002404795
+25,Sg_B07_50,CAG-170 sp900548625
+26,Sg_K40_4,Vescimonas sp001916855
+27,Sg_CA25_21,Parabacteroides goldsteinii
+28,Sg_G18_1,Desulfovibrio sp900556755
+29,Sg_B26_4,Faecousia sp000434635
+30,Sg_CM17_7,CAG-170 sp900545925
+31,Sg_G09_4,Alistipes onderdonkii
+32,Sg_CM32A_26,Vescimonas sp000435975
+33,Sg_G18_19,Coprenecus sp944326235
+34,Sg_M07_39,Alistipes_A ihumii
+35,Sg_I05_27,CAG-170 sp000432135
